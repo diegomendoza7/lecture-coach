@@ -1,0 +1,202 @@
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; worker-src blob:; connect-src 'self' blob:;" />
+<title>Lecture Coach</title>
+<link rel="stylesheet" href="styles.css" />
+
+<div class="root" id="root">
+  <div class="pill" id="pill">
+
+    <!-- ─────────── drag strip ─────────── -->
+    <header class="grip" id="dragbar" data-hit>
+      <span class="dots" aria-hidden="true"></span>
+      <span class="brand">Lecture&nbsp;Coach</span>
+      <span class="badge" id="takeBadge">Take 1</span>
+      <span class="recdot" id="recDot" title="idle"></span>
+
+      <span class="spacer"></span>
+
+      <div class="seg" role="tablist" aria-label="Mode">
+        <button id="modeEdit" class="on" data-hit title="Interactive: type notes, click everything (⌘⇧E)">Edit</button>
+        <button id="modePresent" data-hit title="Click-through, never steals focus from your slides (⌘⇧E)">Present</button>
+      </div>
+
+      <button class="ico" id="btnCompact" data-hit title="Collapse to timer strip">▤</button>
+      <button class="ico" id="btnSettings" data-hit title="Settings">⚙</button>
+      <button class="ico" id="btnHide" data-hit title="Hide overlay (⌘⇧H)">–</button>
+      <button class="ico danger" id="btnQuit" data-hit title="Quit">×</button>
+    </header>
+
+    <!-- ─────────── split body ─────────── -->
+    <div class="body" id="body">
+
+      <!-- LEFT: control column -->
+      <section class="left" data-hit>
+        <div class="clocks">
+          <div class="clock total">
+            <div class="lab">Total</div>
+            <div class="big" id="tTotal">00:00</div>
+            <div class="sub" id="tTotalSub">target 00:00</div>
+          </div>
+          <div class="rule"></div>
+          <div class="clock sect">
+            <div class="lab">Section <span id="secIndex">1/1</span></div>
+            <div class="big" id="tSection">00:00</div>
+            <div class="sub" id="tSectionSub">target 00:00</div>
+          </div>
+        </div>
+
+        <div class="pace">
+          <div class="pacetrack"><div class="pacefill" id="paceFill"></div></div>
+          <div class="pacelab" id="paceLabel">on pace</div>
+        </div>
+
+        <div class="transport">
+          <button class="rec" id="btnRec" data-hit title="Start / stop recording (⌘⇧R)">
+            <i class="glyph"></i><span>REC</span>
+          </button>
+          <button class="tbtn" id="btnPause" data-hit title="Pause / resume (⌘⇧P)" disabled>❚❚</button>
+          <button class="tbtn" id="btnMarker" data-hit title="Flag this moment (⌘⇧M)">⚑</button>
+          <button class="tbtn" id="btnPrev" data-hit title="Previous section (⌘⌃←)">‹</button>
+          <button class="tbtn" id="btnNext" data-hit title="Next section (⌘⌃→)">›</button>
+        </div>
+
+        <div class="toggles">
+          <button class="chip on" id="btnCam" data-hit title="Show webcam bubble in the recording">CAM</button>
+          <button class="chip" id="btnPrompter" data-hit title="Teleprompter band (⌘⇧T)">PROMPTER</button>
+          <button class="chip" id="btnLock" data-hit title="Lock teleprompter click-through (⌘⇧L)">LOCK</button>
+        </div>
+
+        <div class="meterrow">
+          <canvas id="meter" width="520" height="26"></canvas>
+          <div class="mstats">
+            <span id="meterVal">–∞ dB</span>
+            <span id="speakPct">speaking 0%</span>
+          </div>
+        </div>
+
+        <div class="previewrow">
+          <div class="previewwrap" id="previewWrap">
+            <canvas id="stage" width="1920" height="1080"></canvas>
+            <div class="nopreview" id="noPreview">preview off</div>
+          </div>
+          <div class="phint">
+            <div id="hintTitle">What gets recorded</div>
+            <div id="hintBody">Screen + camera only. This pill and the
+              teleprompter are hidden from the capture.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: notes column -->
+      <section class="right" data-hit>
+        <div class="rail" id="rail"></div>
+
+        <div class="notebar">
+          <input id="secTitle" class="tin" placeholder="Section title" spellcheck="false" />
+          <input id="secTarget" class="tin small" placeholder="mm:ss" spellcheck="false" title="Target duration for this section" />
+          <span class="vr"></span>
+          <button class="fmt" data-cmd="bold" data-hit title="Bold (⌘B)"><b>B</b></button>
+          <button class="fmt" data-cmd="italic" data-hit title="Italic (⌘I)"><i>I</i></button>
+          <button class="fmt" data-cmd="insertUnorderedList" data-hit title="Bullets">•</button>
+          <button class="fmt" data-cmd="hiliteColor" data-hit title="Highlight">▮</button>
+          <span class="vr"></span>
+          <button class="fmt" id="btnAddSection" data-hit title="Add a section">＋</button>
+          <button class="fmt" id="btnDelSection" data-hit title="Delete this section">−</button>
+        </div>
+
+        <div class="notes" id="notes" contenteditable="true" spellcheck="true"></div>
+
+        <div class="notefoot">
+          <span id="wordCount">0 words</span>
+          <span id="readTime">≈ 0:00 spoken</span>
+          <button class="link" id="btnAutoTargets" data-hit title="Set every section target from its word count">auto-target</button>
+          <span class="spacer"></span>
+          <span id="saveState">saved</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ─────────── settings sheet ─────────── -->
+    <div class="sheet" id="sheet" hidden data-hit>
+      <div class="sheethead">
+        <strong>Settings</strong>
+        <span class="spacer"></span>
+        <button class="link" id="btnOpenFolder">Recordings folder</button>
+        <button class="link" id="btnExport">Export deck</button>
+        <button class="link" id="btnImport">Import deck</button>
+        <button class="ico" id="btnCloseSheet">×</button>
+      </div>
+
+      <div class="sheetbody">
+        <div class="col">
+          <label>Talk title</label>
+          <input id="deckTitle" class="tin" placeholder="Untitled talk" spellcheck="false" />
+          <label>Camera</label><select id="selCam"></select>
+          <label>Microphone</label><select id="selMic"></select>
+          <label>Recording quality</label>
+          <select id="selQuality">
+            <option value="720">720p · light (4.5 Mbps)</option>
+            <option value="1080" selected>1080p · YouTube (8 Mbps)</option>
+            <option value="native">Native display (12 Mbps)</option>
+          </select>
+          <label>Countdown before REC</label>
+          <select id="selCountdown">
+            <option value="0">none</option><option value="3" selected>3s</option><option value="5">5s</option>
+          </select>
+          <label class="chk"><input type="checkbox" id="chkSysAudio" /> Capture system audio (macOS 13+, falls back silently)</label>
+          <div class="perms" id="permList"></div>
+        </div>
+
+        <div class="col">
+          <label>Screen to record</label>
+          <div class="srcgrid" id="srcGrid"></div>
+          <label>Camera bubble</label>
+          <div class="row">
+            <select id="selCamShape"><option value="circle">circle</option><option value="rect">rounded</option></select>
+            <select id="selCamPos">
+              <option value="br">bottom-right</option><option value="bl">bottom-left</option>
+              <option value="tr">top-right</option><option value="tl">top-left</option>
+            </select>
+          </div>
+          <div class="row">
+            <label class="inline">size</label><input type="range" id="rngCamSize" min="12" max="45" value="24" />
+            <label class="chk inline"><input type="checkbox" id="chkCamMirror" checked /> mirror</label>
+          </div>
+        </div>
+
+        <div class="col">
+          <label>Teleprompter</label>
+          <div class="row"><label class="inline">speed</label><input type="range" id="pSpeed" min="8" max="140" value="42" /></div>
+          <div class="row"><label class="inline">text</label><input type="range" id="pSize" min="18" max="72" value="34" /></div>
+          <div class="row"><label class="inline">opacity</label><input type="range" id="pOpacity" min="20" max="100" value="82" /></div>
+          <label class="chk"><input type="checkbox" id="chkPMirror" /> Mirror text (beam-splitter rigs)</label>
+          <label class="chk"><input type="checkbox" id="chkPFollow" checked /> Auto-scroll while recording</label>
+          <label>Shortcuts</label>
+          <div class="keys" id="keyList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────── take report ─────────── -->
+    <div class="sheet report" id="report" hidden data-hit>
+      <div class="sheethead">
+        <strong>Take report</strong>
+        <span class="spacer"></span>
+        <button class="link" id="btnCopyChapters">Copy YouTube chapters</button>
+        <button class="link" id="btnRevealFile">Reveal in Finder</button>
+        <button class="ico" id="btnCloseReport">×</button>
+      </div>
+      <div class="sheetbody rep" id="reportBody"></div>
+    </div>
+
+    <div class="countdown" id="countdown" hidden><span id="countdownNum">3</span></div>
+    <div class="toast" id="toast" hidden></div>
+  </div>
+</div>
+
+<video id="vScreen" muted playsinline></video>
+<video id="vCam" muted playsinline></video>
+<input type="file" id="fileImport" accept="application/json" hidden />
+
+<script src="renderer.js"></script>

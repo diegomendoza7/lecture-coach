@@ -1,0 +1,55 @@
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+<title>Teleprompter</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:transparent;overflow:hidden;user-select:none;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:#f2f5fa}
+  .band{position:absolute;inset:8px;border-radius:18px;overflow:hidden;
+    background:rgba(8,10,14,.82);border:1px solid rgba(255,255,255,.10);
+    box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .bar{display:flex;align-items:center;gap:10px;height:26px;padding:0 12px;
+    border-bottom:1px solid rgba(255,255,255,.08);font:600 10px/1 ui-monospace,"SF Mono",Menlo,monospace;
+    letter-spacing:.8px;color:#7f889c;-webkit-app-region:drag}
+  .bar .t{color:#c8d3e8;letter-spacing:.2px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar .sp{flex:1}
+  .bar .run{color:#3ddc91}
+  .bar .run.off{color:#ff9aa4}
+  .view{position:absolute;inset:26px 0 0;overflow:hidden}
+  .scroll{position:absolute;inset:0;overflow-y:hidden;padding:26vh 8% 60vh;text-align:center}
+  .scroll.mirror{transform:scaleX(-1)}
+  #text{font-weight:500;letter-spacing:.1px}
+  #text p{margin:0 0 .7em}
+  #text ul{list-style:none;padding:0}
+  #text li{margin:0 0 .55em}
+  #text li::before{content:"— ";color:#7aa2ff}
+  #text i,#text em{color:#ffd9a1;font-style:normal}
+  #text b,#text strong{color:#fff}
+  .mask{position:absolute;left:0;right:0;height:70px;pointer-events:none}
+  .mask.t{top:26px;background:linear-gradient(rgba(8,10,14,.95),transparent)}
+  .mask.b{bottom:0;background:linear-gradient(transparent,rgba(8,10,14,.95))}
+  .eye{position:absolute;left:0;right:0;top:38%;height:0;border-top:1px solid rgba(122,162,255,.35);pointer-events:none}
+  .eye::after{content:"";position:absolute;left:10px;top:-4px;border:4px solid transparent;border-left-color:rgba(122,162,255,.6)}
+  .hint{position:absolute;left:0;right:0;bottom:6px;text-align:center;font:10px ui-monospace,Menlo,monospace;
+    color:#5c6479;pointer-events:none;animation:fade 9s forwards}
+  @keyframes fade{0%,70%{opacity:1}100%{opacity:0}}
+</style>
+
+<div class="band" id="band">
+  <div class="bar">
+    <span id="idx">1/1</span>
+    <span class="t" id="title">—</span>
+    <span class="sp"></span>
+    <span class="run off" id="run">PAUSED</span>
+    <span id="speed">42 px/s</span>
+  </div>
+  <div class="view">
+    <div class="scroll" id="scroll"><div id="text"></div></div>
+    <div class="mask t"></div><div class="mask b"></div>
+    <div class="eye"></div>
+  </div>
+  <div class="hint">⌘⇧S scroll · ⌘⌃↑↓ speed · ⌘⇧L click-through · ⌘⇧T hide</div>
+</div>
+
+<script src="prompter.js"></script>
