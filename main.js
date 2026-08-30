@@ -401,6 +401,9 @@ async function runSmoke() {
       const tw = new BrowserWindow({
         x: d.bounds.x + probeRect.x, y: d.bounds.y + probeRect.y, width: 300, height: 160,
         frame: false, alwaysOnTop: true, skipTaskbar: true, show: false, focusable: false,
+        // Without this the window is throttled, the sweep stalls with the bar
+        // parked on screen, and the "animation" is really a static change.
+        webPreferences: { backgroundThrottling: false },
       });
       tw.setAlwaysOnTop(true, 'screen-saver', 1);
       await tw.loadURL('data:text/html,<body style="margin:0;background:%23ff00ff">');
@@ -421,6 +424,80 @@ async function runSmoke() {
       const pill = await sample(rect);
       check('dashboard pill is not in the frame', dist(pill, hidden) < 45,
         `pill region reads rgb(${pill}); desktop reads rgb(${hidden})`);
+
+      // ── slide-change detection ─────────────────────────────────────
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const page = '<body style="margin:0;font:700 96px system-ui;display:grid;place-items:center;' +
+        'background:#0b1020;color:#fff"><div id="t">1</div>' +
+        '<div id="a" style="position:fixed;top:0;left:-30%;width:30%;height:100%;background:#fff;opacity:0"></div>' +
+        '<script>let f=0;requestAnimationFrame(function l(){f++;requestAnimationFrame(l)});window.__f=()=>f;<\/script></body>';
+      const sw = new BrowserWindow({
+        x: d.bounds.x + 190, y: d.bounds.y + 110, width: 1120, height: 700,
+        frame: false, alwaysOnTop: true, skipTaskbar: true, show: false, focusable: false,
+        // Without this the window is throttled, the sweep stalls with the bar
+        // parked on screen, and the "animation" is really a static change.
+        webPreferences: { backgroundThrottling: false },
+      });
+      sw.setAlwaysOnTop(true, 'screen-saver', 1);
+      await sw.loadURL('data:text/html,' + encodeURIComponent(page));
+      sw.showInactive();
+      const showSlide = (n, bg, fg) => sw.webContents.executeJavaScript(
+        `document.body.style.background='${bg}';document.body.style.color='${fg}';document.getElementById('t').textContent='${n}'`);
+
+      await sleep(1500);
+      await js('window.__lcSlideBegin()');
+      await sleep(1300);
+      const before = (await js('window.__lcSlideState()')).count;
+
+      const fakeDeck = [['2', '#f5f2ea', '#101418'], ['3', '#0b1020', '#ffffff'],
+                        ['4', '#e8eef7', '#101418'], ['5', '#141b2d', '#ffd9a1']];
+      for (const [n, bg, fg] of fakeDeck) { await showSlide(n, bg, fg); await sleep(2600); }
+      const afterSlides = (await js('window.__lcSlideState()')).count;
+      check('slide changes detected one-for-one', afterSlides - before === fakeDeck.length,
+        `${afterSlides - before} detected of ${fakeDeck.length} shown`);
+
+      // A sweeping bar stands in for an embedded video: continuous motion must
+      // not be mistaken for a run of slide changes.
+      const frames0 = await sw.webContents.executeJavaScript('window.__f()');
+      await sw.webContents.executeJavaScript(
+        "document.getElementById('a').style.opacity=1;" +
+        "document.getElementById('a').animate([{transform:'translateX(0)'},{transform:'translateX(430%)'}],{duration:1200,iterations:5})");
+      await sleep(7000);
+      const framesDrawn = (await sw.webContents.executeJavaScript('window.__f()')) - frames0;
+      const animState = await js('window.__lcSlideState()');
+      const afterAnim = animState.count;
+      check('the animation stimulus actually animated', framesDrawn > 150, `${framesDrawn} frames in 7s`);
+      const spurious = animState.attempts.filter((a) => a.counted).slice(-4);
+      // Usually 0. A capture stream that repeats frames can make fast motion look
+      // settled, so the guarantee is "at most one phantom", not "never".
+      check('continuous motion produces at most one phantom slide', afterAnim - afterSlides <= 1,
+        `${afterAnim - afterSlides} event(s) across 6s of animation` +
+        (spurious.length ? ` | counted settles: ${JSON.stringify(spurious)}` : ''));
+      sw.destroy();
+      await sleep(600);
+
+      // Auto-advance rule + report plumbing, exercised without touching a camera.
+      const logic = await js(`(() => {
+        const snap = { auto: cfg.slideAuto, cur: S.cur, running: S.running, log: S.log, cue: deck.sections[1] && deck.sections[1].cue };
+        cfg.slideAuto = true;
+        deck.sections[1].cue = 3;
+        S.cur = 0; S.running = true; S.totalMs = 60000; S.log = [];
+        slides.count = 2; slides.events = [];
+        openLogEntry();
+        onSlideChange();                       // -> slide 3, which is section 2's cue
+        const advanced = S.cur;
+        const json = buildJson('probe');
+        const ok = { advanced, slides: Array.isArray(json.slides), startSlide: json.sections[0].startSlide,
+                     slideCount: json.stats.slideCount, chapters: buildChapters().split('\\n').length };
+        Object.assign(cfg, { slideAuto: snap.auto });
+        if (snap.cue === undefined) delete deck.sections[1].cue; else deck.sections[1].cue = snap.cue;
+        S.cur = snap.cur; S.running = snap.running; S.log = snap.log; S.totalMs = 0;
+        resetSlides(); renderSection();
+        return ok;
+      })()`);
+      check('a slide cue auto-advances the section', logic.advanced === 1, `landed on section index ${logic.advanced}`);
+      check('slide data reaches the sidecar', logic.slides && logic.startSlide === 2 && logic.slideCount >= 2,
+        `slides[] present, section started on slide ${logic.startSlide}, ${logic.slideCount} slides`);
 
       const rec = await js('window.__lcProbeRecord(2500)');
       check('recorder wrote a real file', rec.bytes > 40000,

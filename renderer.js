@@ -47,6 +47,7 @@ const DEFAULT_CFG = {
   camOn: true, camShape: 'circle', camPos: 'br', camSize: 24, camMirror: true,
   camId: '', micId: '', sourceId: '',
   pSpeed: 42, pSize: 34, pOpacity: 82, pMirror: false, pFollow: true,
+  slideDetect: true, slideAuto: false, slideSens: 12,
   wpm: 145,
 };
 
@@ -88,6 +89,7 @@ bind('pill', 'deckTitle', 'hintTitle', 'hintBody', 'takeBadge', 'recDot', 'modeE
   'tTotal', 'tTotalSub', 'tSection', 'tSectionSub', 'secIndex', 'paceFill', 'paceLabel',
   'btnRec', 'btnPause', 'btnMarker', 'btnPrev', 'btnNext', 'btnCam', 'btnPrompter', 'btnLock',
   'meter', 'meterVal', 'speakPct', 'stage', 'previewWrap', 'noPreview',
+  'slideBadge', 'btnSlides', 'secCue', 'chkSlideDetect', 'chkSlideAuto', 'rngSlideSens', 'sensRead', 'btnLearnCues',
   'rail', 'secTitle', 'secTarget', 'btnAddSection', 'btnDelSection', 'notes', 'wordCount', 'readTime',
   'btnAutoTargets', 'saveState', 'sheet', 'btnCloseSheet', 'btnOpenFolder', 'btnExport', 'btnImport', 'fileImport',
   'selCam', 'selMic', 'selQuality', 'selCountdown', 'chkSysAudio', 'permList', 'srcGrid',
@@ -149,6 +151,7 @@ function renderSection() {
   el.notes.innerHTML = s.html || '';
   el.secTitle.value = s.title || '';
   el.secTarget.value = mmss(s.target * 1000);
+  el.secCue.value = s.cue || '';
   el.secIndex.textContent = (S.cur + 1) + '/' + deck.sections.length;
   el.tSectionSub.textContent = 'target ' + mmss(s.target * 1000);
   renderRail();
@@ -215,6 +218,7 @@ function tickClock() {
     S.sectionMs += dt;
   }
   paintClock();
+  updateSlideBadge();
 }
 
 function paintClock() {
@@ -241,7 +245,7 @@ function paintClock() {
 }
 
 function openLogEntry() {
-  S.log.push({ i: S.cur, title: section().title, target: section().target, startTotalMs: S.totalMs, endTotalMs: null });
+  S.log.push({ i: S.cur, title: section().title, target: section().target, startSlide: slides.count, startTotalMs: S.totalMs, endTotalMs: null });
 }
 function closeLogEntry() {
   const e = S.log[S.log.length - 1];
@@ -403,6 +407,7 @@ function startClockWorker(fps) {
     tickWorker.onmessage = () => {
       drawFrame();
       if (frameTrack && S.running && !S.paused) frameTrack.requestFrame();
+      detectSlides();
     };
   }
   tickWorker.postMessage({ ms: Math.round(1000 / fps) });
@@ -428,6 +433,151 @@ function stopPreview() {
   S.previewing = false;
   el.noPreview.hidden = false;
   paintMeter(-100);
+}
+
+/* ═════════════════════ slide-change detection ══════════════════════
+ * Downsample the screen stream to a 64x36 luma grid five times a second and
+ * watch the mean absolute difference. A slide change is a *burst* of
+ * difference that settles into a screen that genuinely looks different from
+ * the one before the burst. Waiting for the settle collapses a Keynote
+ * dissolve into one event instead of six; the before/after comparison stops
+ * a looping animation or an embedded video from firing at all.
+ * Cost: 2304 pixels read, 5x/sec.
+ * ────────────────────────────────────────────────────────────────── */
+
+/* CONFIRM_MS is deliberately long. A display-capture stream occasionally
+ * delivers the same frame twice; mid-motion that reads as a perfectly settled
+ * screen, and a short confirm window turns each such stall into a phantom slide.
+ * A real slide is held for seconds, so waiting a second costs nothing — and the
+ * event is timestamped at the *start* of the change, so timecodes stay exact. */
+const SLIDE_W = 64, SLIDE_H = 36, SAMPLE_MS = 200, CONFIRM_MS = 1000, CALM_MS = 1400, COOLDOWN_MS = 1200;
+
+const slides = {
+  count: 1, events: [], score: 0, settle: 0, attempts: [],
+  prev: null, anchor: null, calm: null, pending: false, burstAt: 0, quietMs: 0, coolMs: 0,
+  lastAt: 0, lastSampleAt: 0, canvas: null, ctx: null,
+};
+
+/* mean absolute difference of two luma grids, 0..1 */
+function mad(a, b) {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / (a.length * 255);
+}
+
+function resetSlides() {
+  slides.count = 1;
+  slides.events = [];
+  slides.attempts = [];
+  slides.prev = null;
+  slides.anchor = null;
+  slides.calm = null;
+  slides.score = 0;
+  slides.pending = false;
+  slides.quietMs = 0;
+  slides.coolMs = 0;
+  slides.lastAt = performance.now();
+}
+
+function detectSlides() {
+  if (!cfg.slideDetect) return;
+  const now = performance.now();
+  if (now - slides.lastSampleAt < SAMPLE_MS) return;
+  const dt = slides.lastSampleAt ? now - slides.lastSampleAt : SAMPLE_MS;
+  slides.lastSampleAt = now;
+
+  const v = el.vScreen;
+  if (!(v.readyState >= 2 && v.videoWidth)) { slides.prev = null; slides.score = 0; return; }
+
+  if (!slides.ctx) {
+    slides.canvas = document.createElement('canvas');
+    slides.canvas.width = SLIDE_W;
+    slides.canvas.height = SLIDE_H;
+    slides.ctx = slides.canvas.getContext('2d', { willReadFrequently: true });
+  }
+  slides.ctx.drawImage(v, 0, 0, SLIDE_W, SLIDE_H);
+  const px = slides.ctx.getImageData(0, 0, SLIDE_W, SLIDE_H).data;
+  const cur = new Uint8Array(SLIDE_W * SLIDE_H);
+  for (let i = 0, j = 0; j < cur.length; i += 4, j++) cur[j] = (px[i] * 77 + px[i + 1] * 150 + px[i + 2] * 29) >> 8;
+
+  const before = slides.prev;
+  slides.score = before ? mad(cur, before) : 0;
+  slides.prev = cur;
+
+  if (slides.coolMs > 0) slides.coolMs -= dt;
+
+  const trigger = cfg.slideSens / 100;
+  if (slides.score > trigger) {
+    // Anchor on the last *settled* screen, never on the previous sample: mid-
+    // animation frames come and go, and anchoring on one makes the eventual
+    // settle look like a real change.
+    if (!slides.pending) { slides.pending = true; slides.anchor = slides.calm; slides.burstAt = S.running ? S.totalMs : 0; }
+    slides.quietMs = 0;
+  } else {
+    slides.quietMs += dt;
+    if (slides.pending && slides.quietMs >= CONFIRM_MS) {
+      slides.pending = false;
+      // The burst has settled. Count it only if the screen ended up somewhere
+      // genuinely different: a looping animation or a video that returns to
+      // its own starting look scores near zero here and is ignored.
+      const structural = slides.anchor ? mad(cur, slides.anchor) : 1;
+      slides.settle = structural;
+      const counted = structural > trigger && slides.coolMs <= 0;
+      if (slides.attempts.length < 60) {
+        slides.attempts.push({ st: +structural.toFixed(3), sc: +slides.score.toFixed(3), anchored: !!slides.anchor, counted });
+      }
+      if (counted) { slides.coolMs = COOLDOWN_MS; onSlideChange(slides.burstAt); }
+      slides.anchor = null;
+    }
+    // Becoming the new reference frame takes longer than confirming a
+    // transition. Motion has lulls — a bar leaving the frame, a video cutting to
+    // a near-still shot — and adopting one of those as the reference makes the
+    // next settle look like a change. A slide is held for seconds; a lull is not.
+    if (!slides.pending && slides.quietMs >= CALM_MS) slides.calm = cur;
+  }
+
+  if (!el.sheet.hidden) {
+    el.sensRead.textContent = 'fires above ' + (cfg.slideSens / 100).toFixed(2) + ' · now ' + slides.score.toFixed(3);
+  }
+}
+
+function onSlideChange(atMs) {
+  slides.count++;
+  slides.lastAt = performance.now();
+  slides.events.push({ slide: slides.count, atMs: S.running ? (atMs || S.totalMs) : null });
+  el.slideBadge.classList.add('hit');
+  setTimeout(() => el.slideBadge.classList.remove('hit'), 420);
+
+  if (cfg.slideAuto && S.running) {
+    const next = deck.sections[S.cur + 1];
+    if (next && next.cue && slides.count >= next.cue) gotoSection(S.cur + 1);
+  }
+}
+
+function updateSlideBadge() {
+  el.slideBadge.classList.toggle('off', !cfg.slideDetect);
+  const dwell = slides.lastAt ? performance.now() - slides.lastAt : 0;
+  el.slideBadge.textContent = '▦ ' + slides.count + ' · ' + mmss(dwell);
+}
+
+/* one row per slide, with how long it was held */
+function slideTable() {
+  const rows = [{ slide: 1, atMs: 0 }].concat(slides.events.filter((e) => e.atMs != null));
+  return rows.map((r, i) => ({
+    slide: r.slide,
+    atMs: Math.round(r.atMs),
+    timecode: hhmmss(r.atMs),
+    dwellMs: Math.round((i + 1 < rows.length ? rows[i + 1].atMs : S.totalMs) - r.atMs),
+  }));
+}
+
+function learnCues() {
+  const rows = mergedLog();
+  rows.forEach((r) => { if (r.i > 0 && r.startSlide) deck.sections[r.i].cue = r.startSlide; });
+  if (deck.sections[0]) deck.sections[0].cue = 1;
+  renderSection();
+  persist();
+  toast('Slide cues learned from this take. Turn on auto-advance to use them.', 'info', 4500);
 }
 
 /* ═══════════════════════════ level meter ═══════════════════════════ */
@@ -546,6 +696,7 @@ async function startRun() {
   S.running = true; S.paused = false;
   S.totalMs = 0; S.sectionMs = 0; S.last = performance.now();
   S.markers = []; S.log = [];
+  resetSlides();
   S.audio = { speakMs: 0, runMs: 0, peakDb: -100, sumDb: 0, nDb: 0, pauses: 0, longestPause: 0, quietMs: 0 };
   openLogEntry();
   startClockWorker(30);
@@ -627,7 +778,12 @@ function buildChapters() {
 
 function stats() {
   const a = S.audio;
+  const table = slideTable();
+  const longest = table.reduce((m, r) => (!m || r.dwellMs > m.dwellMs ? r : m), null);
   return {
+    slideCount: table.length,
+    slidesPerMin: S.totalMs > 0 ? Math.round((table.length / (S.totalMs / 60000)) * 10) / 10 : 0,
+    longestSlide: longest,
     durationMs: Math.round(S.totalMs),
     plannedMs: totalTarget(),
     speakingPct: Math.round((a.speakMs / Math.max(1, a.runMs)) * 100),
@@ -642,8 +798,9 @@ function buildJson(file) {
   return {
     app: 'Lecture Coach', version: 1, recordedAt: new Date().toISOString(),
     file, deckTitle: deck.title, take: S.take, stats: stats(),
+    slides: slideTable(),
     sections: mergedLog().map((r) => ({
-      title: r.title, targetSec: r.target,
+      title: r.title, targetSec: r.target, startSlide: r.startSlide,
       startMs: Math.round(r.startTotalMs), endMs: Math.round(r.endTotalMs),
       actualSec: Math.round((r.endTotalMs - r.startTotalMs) / 1000),
     })),
@@ -664,6 +821,8 @@ function buildMarkdown(file) {
     '- **Duration** ' + mmss(st.durationMs) + '  (planned ' + mmss(st.plannedMs) + ')',
     '- **Speaking time** ' + st.speakingPct + '% · **pauses > 1.5s** ' + st.pauses + ' · **longest** ' + mmss(st.longestPauseMs),
     '- **Level** avg ' + st.avgDb + ' dBFS, peak ' + st.peakDb + ' dBFS',
+    '- **Slides** ' + st.slideCount + ' detected · ' + st.slidesPerMin + '/min · longest ' +
+      (st.longestSlide ? 'slide ' + st.longestSlide.slide + ' at ' + mmss(st.longestSlide.dwellMs) : 'n/a'),
     '- **File** `' + file + '`',
     '',
     '## Section pacing', '',
@@ -682,7 +841,8 @@ function showReport(file, bytes) {
     const d = Math.round(actual - r.target);
     const cls = d > 10 ? 'over' : d < -10 ? 'under' : '';
     return '<tr><td>' + (r.title || '—') + '</td><td class="n">' + mmss(r.target * 1000) + '</td><td class="n">' +
-      mmss(actual * 1000) + '</td><td class="n ' + cls + '">' + (d >= 0 ? '+' : '−') + mmss(Math.abs(d) * 1000) + '</td></tr>';
+      mmss(actual * 1000) + '</td><td class="n ' + cls + '">' + (d >= 0 ? '+' : '−') + mmss(Math.abs(d) * 1000) +
+      '</td><td class="n">' + (r.startSlide || '—') + '</td></tr>';
   }).join('');
 
   el.reportBody.innerHTML =
@@ -691,9 +851,11 @@ function showReport(file, bytes) {
       stat('Speaking', st.speakingPct + '%', 'of the take') +
       stat('Pauses >1.5s', String(st.pauses), 'longest ' + mmss(st.longestPauseMs)) +
       stat('Peak level', st.peakDb + ' dB', 'avg ' + st.avgDb + ' dB') +
+      stat('Slides', String(st.slideCount),
+        st.longestSlide ? 'longest: #' + st.longestSlide.slide + ' at ' + mmss(st.longestSlide.dwellMs) : '') +
       stat('Size', (bytes / 1e6).toFixed(1) + ' MB', recMime.split(';')[0].replace('video/', '')) +
     '</div>' +
-    '<h4>Section pacing</h4><table><tr><th>Section</th><th>Target</th><th>Actual</th><th>Δ</th></tr>' + rows + '</table>' +
+    '<h4>Section pacing</h4><table><tr><th>Section</th><th>Target</th><th>Actual</th><th>Δ</th><th>slide</th></tr>' + rows + '</table>' +
     '<h4>Markers</h4>' + (S.markers.length
       ? '<table>' + S.markers.map((m) => '<tr><td>' + m.label + '</td><td>' + hhmmss(m.atMs) + '</td><td>' + m.section + '</td></tr>').join('') + '</table>'
       : '<p style="opacity:.6">No markers this take.</p>') +
@@ -837,6 +999,10 @@ function wire() {
   el.btnCam.onclick = () => {
     cfg.camOn = !cfg.camOn;
     el.btnCam.classList.toggle('on', cfg.camOn);
+  el.chkSlideDetect.checked = cfg.slideDetect;
+  el.chkSlideAuto.checked = cfg.slideAuto;
+  el.rngSlideSens.value = cfg.slideSens;
+  el.btnSlides.classList.toggle('on', cfg.slideDetect);
     persist();
     if (cfg.camOn && S.previewing) ensureStreams().catch(() => {});
   };
@@ -871,6 +1037,19 @@ function wire() {
     renderSection();
     persist();
   };
+  el.secCue.oninput = () => {
+    const n = parseInt(el.secCue.value, 10);
+    if (n > 0) section().cue = n; else delete section().cue;
+    persist();
+  };
+  el.btnSlides.onclick = () => {
+    cfg.slideDetect = !cfg.slideDetect;
+    el.btnSlides.classList.toggle('on', cfg.slideDetect);
+    el.chkSlideDetect.checked = cfg.slideDetect;
+    if (cfg.slideDetect) slides.prev = null;
+    persist();
+  };
+  el.btnLearnCues.onclick = learnCues;
   el.btnAddSection.onclick = addSection;
   el.btnDelSection.onclick = delSection;
   el.btnAutoTargets.onclick = autoTargets;
@@ -942,6 +1121,14 @@ function wire() {
   setCfg(el.pSpeed, 'pSpeed', num); setCfg(el.pSize, 'pSize', num);
   setCfg(el.pOpacity, 'pOpacity', num); setCfg(el.chkPMirror, 'pMirror', chk);
   setCfg(el.chkPFollow, 'pFollow', chk);
+  setCfg(el.chkSlideAuto, 'slideAuto', chk);
+  setCfg(el.rngSlideSens, 'slideSens', num);
+  el.chkSlideDetect.onchange = () => {
+    cfg.slideDetect = el.chkSlideDetect.checked;
+    el.btnSlides.classList.toggle('on', cfg.slideDetect);
+    slides.prev = null;
+    persist();
+  };
 
   el.selQuality.addEventListener('change', () => { if (S.previewing && !S.running) sizeStage(); });
 
@@ -989,6 +1176,10 @@ function boot() {
   el.chkPMirror.checked = cfg.pMirror;
   el.chkPFollow.checked = cfg.pFollow;
   el.btnCam.classList.toggle('on', cfg.camOn);
+  el.chkSlideDetect.checked = cfg.slideDetect;
+  el.chkSlideAuto.checked = cfg.slideAuto;
+  el.rngSlideSens.value = cfg.slideSens;
+  el.btnSlides.classList.toggle('on', cfg.slideDetect);
   el.keyList.innerHTML = KEYS.map((k) => '<div><kbd>' + k[0] + '</kbd> · ' + k[1] + '</div>').join('');
 
   stageCtx = el.stage.getContext('2d', { alpha: false });
@@ -1058,6 +1249,9 @@ function sampleRect(rect, displayW) {
 }
 
 window.__lcSample = (rect, displayW) => sampleRect(rect, displayW).map(Math.round);
+
+window.__lcSlideBegin = () => { startClockWorker(15); resetSlides(); return true; };
+window.__lcSlideState = () => ({ count: slides.count, score: Number(slides.score.toFixed(3)), attempts: slides.attempts.slice() });
 
 window.__lcProbeRecord = async (ms) => {
   sizeStage();

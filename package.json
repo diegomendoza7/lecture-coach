@@ -1,0 +1,22 @@
+{
+  "name": "lecture-coach",
+  "productName": "Lecture Coach",
+  "version": "0.1.0",
+  "description": "Floating presenter dashboard, teleprompter overlay, and screen+webcam recorder for research talks and lecture videos.",
+  "main": "main.js",
+  "author": "Diego Mendoza",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "smoke": "LC_SMOKE=1 electron .",
+    "verify": "LC_SMOKE=deep electron .",
+    "icon": "electron tools/make-icon.js && bash tools/make-icns.sh",
+    "pack": "electron-builder --mac dir",
+    "dist": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3"
+  }
+}

@@ -75,6 +75,11 @@ html,body{height:100%;background:transparent;overflow:hidden;
 .pacefill{height:100%;width:0;border-radius:99px;background:var(--ok);transition:width .2s linear,background .3s}
 .pacefill.warn{background:var(--warn)}
 .pacefill.over{background:var(--hot)}
+.slidebadge{flex:none;font:600 9.5px/1 var(--mono);color:var(--ink3);background:var(--bg2);
+  border:1px solid var(--line);border-radius:99px;padding:4px 7px;transition:color .18s,border-color .18s,background .18s}
+.slidebadge.hit{color:#cddcff;border-color:rgba(122,162,255,.6);background:rgba(122,162,255,.2)}
+.slidebadge.off{opacity:.4}
+.sensread{font:10px/1.4 var(--mono);color:var(--ink3);margin-top:2px}
 .pacelab{font:600 10px/1 var(--mono);color:var(--ink3);min-width:96px;text-align:right}
 
 /* transport */
@@ -125,7 +130,7 @@ html,body{height:100%;background:transparent;overflow:hidden;
 .tin{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--line);border-radius:7px;
   padding:5px 8px;color:var(--ink);font:12px inherit;outline:none;user-select:text}
 .tin:focus{border-color:rgba(122,162,255,.55)}
-.tin.small{flex:none;width:62px;text-align:center;font-family:var(--mono);font-size:11px}
+.tin.small{flex:none;width:58px;text-align:center;font-family:var(--mono);font-size:11px}
 .vr{width:1px;height:16px;background:var(--line)}
 .fmt{width:24px;height:24px;border:1px solid transparent;border-radius:6px;background:transparent;
   color:var(--ink2);font-size:11px;cursor:pointer}

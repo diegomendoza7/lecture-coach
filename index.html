@@ -47,6 +47,7 @@
         </div>
 
         <div class="pace">
+          <span class="slidebadge" id="slideBadge" title="Detected slide · time on this slide">▦ 1 · 0:00</span>
           <div class="pacetrack"><div class="pacefill" id="paceFill"></div></div>
           <div class="pacelab" id="paceLabel">on pace</div>
         </div>
@@ -63,6 +64,7 @@
 
         <div class="toggles">
           <button class="chip on" id="btnCam" data-hit title="Show webcam bubble in the recording">CAM</button>
+          <button class="chip on" id="btnSlides" data-hit title="Watch the screen for slide changes">SLIDES</button>
           <button class="chip" id="btnPrompter" data-hit title="Teleprompter band (⌘⇧T)">PROMPTER</button>
           <button class="chip" id="btnLock" data-hit title="Lock teleprompter click-through (⌘⇧L)">LOCK</button>
         </div>
@@ -95,6 +97,7 @@
         <div class="notebar">
           <input id="secTitle" class="tin" placeholder="Section title" spellcheck="false" />
           <input id="secTarget" class="tin small" placeholder="mm:ss" spellcheck="false" title="Target duration for this section" />
+          <input id="secCue" class="tin small" placeholder="cue" spellcheck="false" title="Auto-advance to this section when the talk reaches this slide number" />
           <span class="vr"></span>
           <button class="fmt" data-cmd="bold" data-hit title="Bold (⌘B)"><b>B</b></button>
           <button class="fmt" data-cmd="italic" data-hit title="Italic (⌘I)"><i>I</i></button>
@@ -163,6 +166,14 @@
             <label class="inline">size</label><input type="range" id="rngCamSize" min="12" max="45" value="24" />
             <label class="chk inline"><input type="checkbox" id="chkCamMirror" checked /> mirror</label>
           </div>
+
+          <label>Slide detection</label>
+          <label class="chk"><input type="checkbox" id="chkSlideDetect" checked /> Watch the screen for slide changes</label>
+          <label class="chk"><input type="checkbox" id="chkSlideAuto" /> Auto-advance sections at their slide cue</label>
+          <div class="row">
+            <label class="inline">sensitivity</label><input type="range" id="rngSlideSens" min="3" max="30" value="12" />
+          </div>
+          <div class="sensread" id="sensRead">fires above 0.12 · now 0.00</div>
         </div>
 
         <div class="col">
@@ -183,6 +194,7 @@
       <div class="sheethead">
         <strong>Take report</strong>
         <span class="spacer"></span>
+        <button class="link" id="btnLearnCues">Learn slide cues</button>
         <button class="link" id="btnCopyChapters">Copy YouTube chapters</button>
         <button class="link" id="btnRevealFile">Reveal in Finder</button>
         <button class="ico" id="btnCloseReport">×</button>

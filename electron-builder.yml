@@ -1,0 +1,52 @@
+appId: com.diegomendoza.lecturecoach
+productName: Lecture Coach
+copyright: © 2026 Diego Mendoza
+
+directories:
+  buildResources: build
+  output: dist
+
+# No runtime dependencies, so node_modules is not bundled at all.
+files:
+  - main.js
+  - preload.js
+  - renderer.js
+  - prompter.js
+  - index.html
+  - prompter.html
+  - styles.css
+
+npmRebuild: false
+afterPack: tools/afterpack-sign.js
+
+mac:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  # No Developer ID on this machine: electron-builder skips signing and
+  # tools/afterpack-sign.js ad-hoc signs instead. To ship a notarized build,
+  # delete this line and set the CSC_* / notarize settings (see README).
+  identity: null
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # For a distributable build: delete `identity: null` above, export CSC_NAME (or
+  # CSC_LINK + CSC_KEY_PASSWORD), uncomment the line below, and export
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID.
+  # notarize: true
+  extendInfo:
+    NSCameraUsageDescription: >-
+      Lecture Coach records your webcam into the picture-in-picture bubble of your practice takes.
+    NSMicrophoneUsageDescription: >-
+      Lecture Coach records your voice into your practice takes and shows a live level meter.
+    NSHighResolutionCapable: true
+    NSSupportsAutomaticGraphicsSwitching: true
+
+dmg:
+  title: Lecture Coach
