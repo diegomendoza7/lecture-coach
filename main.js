@@ -14,10 +14,11 @@
 
 const {
   app, BrowserWindow, ipcMain, desktopCapturer, session, globalShortcut,
-  systemPreferences, screen, shell, Menu,
+  systemPreferences, screen, shell, Menu, dialog,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { importDeck } = require('./importer');
 
 const IS_MAC = process.platform === 'darwin';
 const SMOKE = !!process.env.LC_SMOKE;      // headless-ish self test, see runSmoke()
@@ -159,6 +160,14 @@ function fire(name) {
     .catch(() => {});
 }
 
+async function importOne(file, wpm) {
+  try {
+    return await importDeck(file, wpm);
+  } catch (e) {
+    return { error: (e && e.message) || String(e) };
+  }
+}
+
 function registerIpc() {
   ipcMain.on('renderer:ready', (e, who) => { readyMarks.add(who); });
 
@@ -279,6 +288,23 @@ function registerIpc() {
     return written;
   });
 
+  ipcMain.handle('deck:import', async (_e, wpm) => {
+    const res = await dialog.showOpenDialog(dash, {
+      title: 'Import a talk',
+      message: 'Pick a presentation or document to turn into sections, notes and slide cues',
+      buttonLabel: 'Import',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Presentations & documents', extensions: ['pptx', 'pdf', 'docx', 'doc', 'rtf', 'odt', 'md', 'markdown', 'txt', 'json'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    if (res.canceled || !res.filePaths[0]) return null;
+    return importOne(res.filePaths[0], wpm);
+  });
+
+  ipcMain.handle('deck:import-path', (_e, { file, wpm }) => importOne(file, wpm));
+
   ipcMain.handle('shell:reveal', (_e, p) => { if (p) shell.showItemInFolder(p); return true; });
   ipcMain.handle('shell:open-dir', () => { shell.openPath(outDir()); return outDir(); });
 
@@ -347,6 +373,8 @@ function buildMenu() {
         { label: 'Start / Stop Recording', accelerator: 'Command+Shift+R', click: () => fire('record') },
         { label: 'Add Marker', accelerator: 'Command+Shift+M', click: () => fire('marker') },
         { type: 'separator' },
+        { label: 'Import a Talk…', accelerator: 'Command+O', click: () => fire('import') },
+        { type: 'separator' },
         { label: 'Toggle Teleprompter', accelerator: 'Command+Shift+T', click: () => fire('prompter') },
         { label: 'Edit / Present Mode', accelerator: 'Command+Shift+E', click: () => fire('mode') },
         { type: 'separator' },
@@ -368,7 +396,12 @@ async function runSmoke() {
     await new Promise((r) => setTimeout(r, 200));
   }
   const checks = [];
+  const skips = [];
   const check = (name, ok, detail = '') => checks.push({ name, ok: !!ok, detail });
+  /* Checks that need our own windows to be visible in the capture. When the
+     screen is asleep or locked nothing renders into the stream, which is not a
+     code failure — so skip them loudly instead of reporting three red herrings. */
+  const checkIf = (gate, name, ok, detail = '') => (gate ? check(name, ok, detail) : skips.push(name));
 
   check('dash renderer ready', readyMarks.has('dash'));
   check('prompter renderer ready', readyMarks.has('prompter'));
@@ -415,14 +448,16 @@ async function runSmoke() {
       const hidden = await sample({ x: probeRect.x + 40, y: probeRect.y + 40, w: 220, h: 80 });
       tw.destroy();
 
-      check('capture stream is live and correctly mapped', dist(visible, [255, 0, 255]) < 70,
-        `probe window reads rgb(${visible}) where magenta was drawn`);
-      check('setContentProtection removes a window from the capture', dist(visible, hidden) > 60,
+      const seesWindows = dist(visible, [255, 0, 255]) < 70;
+      check('the capture can see an ordinary window', seesWindows,
+        seesWindows ? `probe window reads rgb(${visible}) where magenta was drawn`
+          : `read rgb(${visible}) where magenta was drawn — the display is asleep or the screen is locked, so nothing renders into the capture. Unlock and re-run.`);
+      checkIf(seesWindows, 'setContentProtection removes a window from the capture', dist(visible, hidden) > 60,
         `rgb(${visible}) -> rgb(${hidden}) once protected`);
 
       // And the dashboard itself, which is protected from birth:
       const pill = await sample(rect);
-      check('dashboard pill is not in the frame', dist(pill, hidden) < 45,
+      checkIf(seesWindows, 'dashboard pill is not in the frame', dist(pill, hidden) < 45,
         `pill region reads rgb(${pill}); desktop reads rgb(${hidden})`);
 
       // ── slide-change detection ─────────────────────────────────────
@@ -453,7 +488,7 @@ async function runSmoke() {
                         ['4', '#e8eef7', '#101418'], ['5', '#141b2d', '#ffd9a1']];
       for (const [n, bg, fg] of fakeDeck) { await showSlide(n, bg, fg); await sleep(2600); }
       const afterSlides = (await js('window.__lcSlideState()')).count;
-      check('slide changes detected one-for-one', afterSlides - before === fakeDeck.length,
+      checkIf(seesWindows, 'slide changes detected one-for-one', afterSlides - before === fakeDeck.length,
         `${afterSlides - before} detected of ${fakeDeck.length} shown`);
 
       // A sweeping bar stands in for an embedded video: continuous motion must
@@ -470,7 +505,7 @@ async function runSmoke() {
       const spurious = animState.attempts.filter((a) => a.counted).slice(-4);
       // Usually 0. A capture stream that repeats frames can make fast motion look
       // settled, so the guarantee is "at most one phantom", not "never".
-      check('continuous motion produces at most one phantom slide', afterAnim - afterSlides <= 1,
+      checkIf(seesWindows, 'continuous motion produces at most one phantom slide', afterAnim - afterSlides <= 1,
         `${afterAnim - afterSlides} event(s) across 6s of animation` +
         (spurious.length ? ` | counted settles: ${JSON.stringify(spurious)}` : ''));
       sw.destroy();
@@ -478,7 +513,9 @@ async function runSmoke() {
 
       // Auto-advance rule + report plumbing, exercised without touching a camera.
       const logic = await js(`(() => {
-        const snap = { auto: cfg.slideAuto, cur: S.cur, running: S.running, log: S.log, cue: deck.sections[1] && deck.sections[1].cue };
+        const snap = { auto: cfg.slideAuto, cur: S.cur, running: S.running, log: S.log,
+                       cue: deck.sections[1] && deck.sections[1].cue,
+                       saved: localStorage.getItem('lc.deck.v1') };
         cfg.slideAuto = true;
         deck.sections[1].cue = 3;
         S.cur = 0; S.running = true; S.totalMs = 60000; S.log = [];
@@ -492,12 +529,64 @@ async function runSmoke() {
         Object.assign(cfg, { slideAuto: snap.auto });
         if (snap.cue === undefined) delete deck.sections[1].cue; else deck.sections[1].cue = snap.cue;
         S.cur = snap.cur; S.running = snap.running; S.log = snap.log; S.totalMs = 0;
+        // gotoSection() persisted mid-test; put the stored deck back byte for byte
+        if (snap.saved === null) localStorage.removeItem('lc.deck.v1'); else localStorage.setItem('lc.deck.v1', snap.saved);
         resetSlides(); renderSection();
         return ok;
       })()`);
       check('a slide cue auto-advances the section', logic.advanced === 1, `landed on section index ${logic.advanced}`);
       check('slide data reaches the sidecar', logic.slides && logic.startSlide === 2 && logic.slideCount >= 2,
         `slides[] present, section started on slide ${logic.startSlide}, ${logic.slideCount} slides`);
+
+      // ── deck import, end to end through the real IPC path ──
+      const fixture = path.join(app.getPath('temp'), 'lc_verify_import.md');
+      fs.writeFileSync(fixture,
+        '# Verify talk\n\n## Hook\nOne sentence.\n\n## Middle\n- alpha\n- beta\n\n## Close\nLast word.\n');
+      const imp = await js(`(async () => {
+        const before = deck.sections.length;
+        // The suite must not disturb the user's saved work, including the
+        // single-level import backup, so snapshot the keys and put them back.
+        const snap = { deck: localStorage.getItem('lc.deck.v1'), backup: localStorage.getItem('lc.deck.v1.backup') };
+        await applyImport(window.coach.importPath(${JSON.stringify(fixture)}, 150));
+        const got = { before, title: deck.title, n: deck.sections.length,
+          titles: deck.sections.map((s) => s.title),
+          rail: document.querySelectorAll('.railchip').length,
+          notesShown: el.notes.innerText.trim().length > 0 };
+        if (snap.deck === null) localStorage.removeItem('lc.deck.v1'); else localStorage.setItem('lc.deck.v1', snap.deck);
+        if (snap.backup === null) localStorage.removeItem('lc.deck.v1.backup'); else localStorage.setItem('lc.deck.v1.backup', snap.backup);
+        deck = snap.deck ? JSON.parse(snap.deck) : DEFAULT_DECK();   // nothing saved yet = the starter deck
+        S.cur = 0; renderSection();
+        got.after = deck.sections.length;
+        got.restored = deck.sections.length === before &&
+          localStorage.getItem('lc.deck.v1.backup') === snap.backup;
+        return got;
+      })()`);
+      fs.unlinkSync(fixture);
+      check('import builds sections through the real IPC path',
+        imp.n === 3 && imp.title === 'Verify talk' && imp.rail === 3 && imp.notesShown,
+        `${imp.n} sections ${JSON.stringify(imp.titles)}, rail ${imp.rail}`);
+      check('import leaves the saved deck and its undo backup intact', imp.restored,
+        `${imp.after} sections after restore, was ${imp.before}`);
+
+      // ── camera bubble: rectangle by default, hairline frame ──
+      const rectB = await js('window.__lcProbeBubble("rect")');
+      const circB = await js('window.__lcProbeBubble("circle")');
+      const green = (p) => p[1] > 140 && p[0] < 110;
+      check('camera bubble is a rectangle, filling its corners',
+        green(rectB.corner) && green(rectB.centre) && !green(circB.corner) && green(circB.centre),
+        `rect corner rgb(${rectB.corner}) vs circle corner rgb(${circB.corner})`);
+      check('bubble frame is present but a hairline, not a ring',
+        rectB.frameRows >= 1 && rectB.frameRows <= 3,
+        `${rectB.frameRows} frame row(s) at ${rectB.bw}x${rectB.bh}; red channel down the edge = [${rectB.edge}] (0 = picture, high = white ring)`);
+      check('stored config migrated to the rectangular frame', rectB.storedShape === 'rect',
+        `camShape is "${rectB.storedShape}"`);
+
+      // ── iPhone / Continuity Camera selection, with a stubbed device list ──
+      const phone = await js('window.__lcProbePhone()');
+      check('an iPhone camera is recognised and selected',
+        phone.picked === 'phone-1' && phone.classified.iphone && phone.classified.ipad
+          && !phone.classified.facetime && !phone.classified.virtual,
+        `picked ${phone.picked}, classified ${JSON.stringify(phone.classified)}`);
 
       const rec = await js('window.__lcProbeRecord(2500)');
       check('recorder wrote a real file', rec.bytes > 40000,
@@ -512,6 +601,7 @@ async function runSmoke() {
   const failed = checks.filter((c) => !c.ok);
   console.log('\n--- Lecture Coach smoke ---');
   for (const c of checks) console.log(`${c.ok ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? `  (${c.detail})` : ''}`);
+  for (const n of skips) console.log(`SKIP  ${n}  (needs a visible screen)`);
   console.log(`${failed.length ? 'FAILED' : 'ALL PASS'} (${checks.length - failed.length}/${checks.length})\n`);
   app.exit(failed.length ? 1 : 0);
 }

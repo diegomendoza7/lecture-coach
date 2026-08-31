@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const invoke = (ch, p) => ipcRenderer.invoke(ch, p);
 
@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld('coach', {
     onContent: (fn) => ipcRenderer.on('prompter:content', (_e, p) => fn(p)),
     onCfg: (fn) => ipcRenderer.on('prompter:cfg', (_e, p) => fn(p)),
   },
+
+  // deck import
+  importDeck: (wpm) => invoke('deck:import', wpm),
+  importPath: (file, wpm) => invoke('deck:import-path', { file, wpm }),
+  // Electron no longer exposes File.path; this is the sanctioned replacement.
+  pathForFile: (file) => webUtils.getPathForFile(file),
 
   // files
   recOpen: (payload) => invoke('rec:open', payload),

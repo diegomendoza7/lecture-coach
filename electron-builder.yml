@@ -10,6 +10,7 @@ directories:
 files:
   - main.js
   - preload.js
+  - importer.js
   - renderer.js
   - prompter.js
   - index.html
@@ -45,6 +46,9 @@ mac:
       Lecture Coach records your webcam into the picture-in-picture bubble of your practice takes.
     NSMicrophoneUsageDescription: >-
       Lecture Coach records your voice into your practice takes and shows a live level meter.
+    # Opt in to Continuity Camera device discovery (iPhone as webcam). Recent
+    # Electron links a new enough SDK to get this anyway; harmless belt-and-braces.
+    NSCameraUseContinuityCameraDeviceType: true
     NSHighResolutionCapable: true
     NSSupportsAutomaticGraphicsSwitching: true
 

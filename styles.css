@@ -157,6 +157,10 @@ body.compact .body .right,body.compact .meterrow,body.compact .previewrow,body.c
 body.compact .left{width:auto;flex:1;border-right:0}
 body.compact .clocks{gap:16px}
 
+body.dropping .pill{border-color:rgba(122,162,255,.85);box-shadow:0 0 0 3px rgba(122,162,255,.28),0 18px 50px rgba(0,0,0,.55)}
+body.dropping .pill::after{content:"Drop a .pptx, .pdf, .docx or .md to build the deck";position:absolute;inset:auto 0 0 0;
+  padding:9px;text-align:center;font:600 11px/1 var(--mono);color:#dbe6ff;background:rgba(122,162,255,.22);z-index:20}
+
 /* ── sheets ─────────────────────────────────────────────────────────── */
 .sheet{position:absolute;inset:30px 0 0;background:rgba(13,15,20,.985);display:flex;flex-direction:column;z-index:5}
 .sheethead{display:flex;align-items:center;gap:12px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px}
@@ -201,8 +205,9 @@ body.compact .clocks{gap:16px}
 .countdown span{font:700 74px/1 var(--mono);color:#fff;animation:pop .9s ease-out}
 @keyframes pop{from{transform:scale(.72);opacity:.3}to{transform:scale(1);opacity:1}}
 .toast{position:absolute;left:12px;right:12px;bottom:10px;z-index:8;padding:8px 12px;border-radius:9px;
-  background:rgba(255,77,94,.16);border:1px solid rgba(255,77,94,.45);color:#ffdfe3;font-size:11.5px;line-height:1.45}
-.toast.info{background:rgba(122,162,255,.14);border-color:rgba(122,162,255,.4);color:#dbe6ff}
+  background:#1b1620;border:1px solid rgba(255,77,94,.5);color:#ffdfe3;font-size:11.5px;line-height:1.45;
+  box-shadow:0 8px 22px rgba(0,0,0,.55)}
+.toast.info{background:#141a2b;border-color:rgba(122,162,255,.5);color:#dbe6ff}
 .toast button{margin-left:8px}
 
 /* hidden media elements — kept on-screen-but-offset so Chromium keeps decoding */

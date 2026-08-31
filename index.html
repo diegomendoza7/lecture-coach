@@ -127,7 +127,7 @@
         <span class="spacer"></span>
         <button class="link" id="btnOpenFolder">Recordings folder</button>
         <button class="link" id="btnExport">Export deck</button>
-        <button class="link" id="btnImport">Import deck</button>
+        <button class="link" id="btnImport" title="pptx · pdf · docx · doc · rtf · odt · md · txt · json — or just drop the file on the pill">Import a talk…</button>
         <button class="ico" id="btnCloseSheet">×</button>
       </div>
 
@@ -135,7 +135,9 @@
         <div class="col">
           <label>Talk title</label>
           <input id="deckTitle" class="tin" placeholder="Untitled talk" spellcheck="false" />
-          <label>Camera</label><select id="selCam"></select>
+          <label>Camera <button class="link" id="btnUsePhone" title="Use an iPhone as the camera over Continuity Camera">use iPhone</button></label>
+          <select id="selCam"></select>
+          <div class="sensread" id="camHint"></div>
           <label>Microphone</label><select id="selMic"></select>
           <label>Recording quality</label>
           <select id="selQuality">
@@ -156,15 +158,18 @@
           <div class="srcgrid" id="srcGrid"></div>
           <label>Camera bubble</label>
           <div class="row">
-            <select id="selCamShape"><option value="circle">circle</option><option value="rect">rounded</option></select>
+            <select id="selCamShape"><option value="rect">rectangle</option><option value="circle">circle</option></select>
             <select id="selCamPos">
               <option value="br">bottom-right</option><option value="bl">bottom-left</option>
               <option value="tr">top-right</option><option value="tl">top-left</option>
             </select>
           </div>
           <div class="row">
-            <label class="inline">size</label><input type="range" id="rngCamSize" min="12" max="45" value="24" />
+            <select id="selCamFrame"><option value="hairline">hairline frame</option><option value="none">no frame</option></select>
             <label class="chk inline"><input type="checkbox" id="chkCamMirror" checked /> mirror</label>
+          </div>
+          <div class="row">
+            <label class="inline">size</label><input type="range" id="rngCamSize" min="12" max="45" value="24" />
           </div>
 
           <label>Slide detection</label>
@@ -209,6 +214,5 @@
 
 <video id="vScreen" muted playsinline></video>
 <video id="vCam" muted playsinline></video>
-<input type="file" id="fileImport" accept="application/json" hidden />
 
 <script src="renderer.js"></script>

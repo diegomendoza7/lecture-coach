@@ -44,7 +44,7 @@ const DECK_KEY = 'lc.deck.v1';
 
 const DEFAULT_CFG = {
   quality: '1080', countdown: 3, systemAudio: false,
-  camOn: true, camShape: 'circle', camPos: 'br', camSize: 24, camMirror: true,
+  camOn: true, camShape: 'rect', camPos: 'br', camSize: 24, camMirror: true, camFrame: 'hairline',
   camId: '', micId: '', sourceId: '',
   pSpeed: 42, pSize: 34, pOpacity: 82, pMirror: false, pFollow: true,
   slideDetect: true, slideAuto: false, slideSens: 12,
@@ -65,7 +65,11 @@ const DEFAULT_DECK = () => ({
 
 const load = (k, fb) => { try { const v = JSON.parse(localStorage.getItem(k)); return v || fb; } catch { return fb; } };
 
+const CFG_V = 2;
 const cfg = Object.assign({}, DEFAULT_CFG, load(CFG_KEY, {}));
+// v2: the camera bubble is a rectangle with a hairline frame, not a ringed circle.
+if ((cfg._v || 1) < 2) { cfg.camShape = 'rect'; cfg.camFrame = 'hairline'; }
+cfg._v = CFG_V;
 let deck = load(DECK_KEY, null) || DEFAULT_DECK();
 
 const S = {
@@ -91,9 +95,9 @@ bind('pill', 'deckTitle', 'hintTitle', 'hintBody', 'takeBadge', 'recDot', 'modeE
   'meter', 'meterVal', 'speakPct', 'stage', 'previewWrap', 'noPreview',
   'slideBadge', 'btnSlides', 'secCue', 'chkSlideDetect', 'chkSlideAuto', 'rngSlideSens', 'sensRead', 'btnLearnCues',
   'rail', 'secTitle', 'secTarget', 'btnAddSection', 'btnDelSection', 'notes', 'wordCount', 'readTime',
-  'btnAutoTargets', 'saveState', 'sheet', 'btnCloseSheet', 'btnOpenFolder', 'btnExport', 'btnImport', 'fileImport',
+  'btnAutoTargets', 'saveState', 'sheet', 'btnCloseSheet', 'btnOpenFolder', 'btnExport', 'btnImport',
   'selCam', 'selMic', 'selQuality', 'selCountdown', 'chkSysAudio', 'permList', 'srcGrid',
-  'selCamShape', 'selCamPos', 'rngCamSize', 'chkCamMirror',
+  'selCamShape', 'selCamPos', 'rngCamSize', 'chkCamMirror', 'selCamFrame', 'btnUsePhone', 'camHint',
   'pSpeed', 'pSize', 'pOpacity', 'chkPMirror', 'chkPFollow', 'keyList',
   'report', 'reportBody', 'btnCopyChapters', 'btnRevealFile', 'btnCloseReport',
   'countdown', 'countdownNum', 'toast', 'vScreen', 'vCam');
@@ -108,8 +112,8 @@ function toast(msg, kind = 'err', ms = 4200) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.toast.hidden = true; }, ms);
 }
-function toastAction(msg, label, fn) {
-  toast(msg, 'err', 9000);
+function toastAction(msg, label, fn, kind = 'err') {
+  toast(msg, kind, 11000);
   const b = document.createElement('button');
   b.className = 'link';
   b.textContent = label;
@@ -192,6 +196,39 @@ function delSection() {
   persist();
 }
 
+/** Replace the deck with an imported one, keeping a single level of undo. */
+async function applyImport(promise) {
+  let res;
+  try { res = await promise; } catch (e) { return toast('Import failed: ' + e.message); }
+  if (!res) return;                                    // dialog cancelled
+  if (res.error) return toast(res.error, 'err', 9000);
+
+  localStorage.setItem(DECK_KEY + '.backup', JSON.stringify(deck));
+  deck = { title: res.title, sections: res.sections };
+  S.cur = 0;
+  el.deckTitle.value = deck.title || '';
+  renderSection();
+  persist();
+
+  const cues = res.sections.filter((s) => s.cue).length;
+  const plan = mmss(totalTarget());
+  toastAction(
+    `${res.sections.length} sections from ${res.source} · ${res.note} · plan ${plan}` +
+    (cues ? ` · ${cues} slide cues set` : ''),
+    'undo', undoImport, 'info');
+}
+
+function undoImport() {
+  const raw = localStorage.getItem(DECK_KEY + '.backup');
+  if (!raw) return;
+  try { deck = JSON.parse(raw); } catch { return; }
+  S.cur = 0;
+  el.deckTitle.value = deck.title || '';
+  renderSection();
+  persist();
+  toast('Import undone.', 'info', 2000);
+}
+
 function autoTargets() {
   const tmp = document.createElement('div');
   section().html = el.notes.innerHTML;
@@ -254,6 +291,8 @@ function closeLogEntry() {
 
 /* ═══════════════════════ media: streams + canvas ═══════════════════ */
 
+const RADIUS = 0.035;          // camera bubble corner radius, as a fraction of its width
+
 const QUALITY = { 720: [1280, 720, 4.5e6], 1080: [1920, 1080, 8e6], native: [null, null, 12e6] };
 
 async function ensureStreams() {
@@ -277,32 +316,128 @@ async function ensureStreams() {
     await el.vScreen.play().catch(() => {});
   }
 
-  if (cfg.camOn && !media.cam) {
-    try {
-      media.cam = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: cfg.camId ? { exact: cfg.camId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-      });
-      el.vCam.srcObject = media.cam;
-      await el.vCam.play().catch(() => {});
-    } catch {
-      toast('Camera unavailable — recording screen only.', 'info');
-      cfg.camOn = false;
-      el.btnCam.classList.remove('on');
-    }
-  }
-
-  if (!media.mic) {
-    media.mic = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: cfg.micId ? { exact: cfg.micId } : undefined,
-        echoCancellation: false, noiseSuppression: true, autoGainControl: false,
-      },
-    }).catch((e) => { throw new Error('Microphone unavailable: ' + e.name); });
-    buildAudioGraph();
-  }
+  if (cfg.camOn && !media.cam) await acquireCam();
+  if (!media.mic) await acquireMic();
 
   sizeStage();
   await refreshDevices();
+}
+
+/* ─────────────────────── camera & microphone devices ──────────────────────
+ * An iPhone used as a Continuity Camera is an ordinary videoinput device that
+ * comes and goes as the phone wakes, locks or walks away. So cfg.camId is a
+ * *preference*, never a hard requirement: acquisition falls back through exact
+ * -> preferred -> any, a dropped track re-acquires, and if the preferred device
+ * reappears the stream switches back to it on its own.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+const PHONE_RE = /iphone|ipad|continuity/i;
+const isPhoneCam = (label) => PHONE_RE.test(label || '');
+let devices = { cams: [], mics: [] };
+
+async function acquireCam() {
+  const base = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+  const attempts = cfg.camId
+    ? [{ ...base, deviceId: { exact: cfg.camId } }, { ...base, deviceId: cfg.camId }, base]
+    : [base];
+
+  for (const video of attempts) {
+    try {
+      media.cam = await navigator.mediaDevices.getUserMedia({ video });
+      break;
+    } catch (e) {
+      if (e && e.name === 'NotAllowedError') break;      // denied, not missing
+    }
+  }
+  if (!media.cam) {
+    toast('Camera unavailable — recording screen only.', 'info');
+    cfg.camOn = false;
+    el.btnCam.classList.remove('on');
+    return;
+  }
+  el.vCam.srcObject = media.cam;
+  await el.vCam.play().catch(() => {});
+  watchCamTrack();
+  await refreshDevices();          // labels only appear once permission is granted
+}
+
+/** The phone locking or leaving ends the track; drop back to whatever is left. */
+function watchCamTrack() {
+  const t = media.cam && media.cam.getVideoTracks()[0];
+  if (!t) return;
+  t.addEventListener('ended', async () => {
+    const wasPhone = isPhoneCam(t.label);
+    media.cam = null;
+    el.vCam.srcObject = null;
+    toast(wasPhone
+      ? 'iPhone camera dropped — using another camera until it comes back.'
+      : 'Camera dropped — reconnecting.', 'info', 5000);
+    await refreshDevices();
+    if (cfg.camOn && S.previewing) await acquireCam();   // cfg.camId stays the preference
+  });
+}
+
+async function restartCam() {
+  if (media.cam) media.cam.getTracks().forEach((tr) => tr.stop());
+  media.cam = null;
+  el.vCam.srcObject = null;
+  if (cfg.camOn && S.previewing) await acquireCam();
+}
+
+async function acquireMic() {
+  media.mic = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      deviceId: cfg.micId ? { ideal: cfg.micId } : undefined,
+      echoCancellation: false, noiseSuppression: true, autoGainControl: false,
+    },
+  }).catch((e) => { throw new Error('Microphone unavailable: ' + e.name); });
+  buildAudioGraph();
+}
+
+async function restartMic() {
+  if (S.running) return toast('Stop the take before switching microphone.', 'info', 3000);
+  if (media.mic) media.mic.getTracks().forEach((tr) => tr.stop());
+  media.mic = null;
+  if (media.ctx) { media.ctx.close(); media.ctx = null; media.dest = null; media.analyser = null; }
+  if (S.previewing) await acquireMic();
+}
+
+/** An iPhone appearing or leaving fires this; reconnect to the preferred camera. */
+async function onDeviceChange() {
+  await refreshDevices();
+  if (!cfg.camOn || !cfg.camId || !media.cam) return;
+  const active = media.cam.getVideoTracks()[0];
+  const activeId = active && active.getSettings().deviceId;
+  const wanted = devices.cams.some((d) => d.deviceId === cfg.camId);
+  if (wanted && activeId !== cfg.camId) {
+    await restartCam();
+    toast('Reconnected to your preferred camera.', 'info', 2500);
+  }
+}
+
+function usePhoneCam() {
+  const phone = devices.cams.find((d) => isPhoneCam(d.label));
+  if (!phone) {
+    return toast('No iPhone camera found. Needs iOS 17+, the same Apple ID, Wi-Fi and Bluetooth on, '
+      + 'Continuity Camera enabled in iPhone Settings → General → AirPlay & Continuity, and the phone '
+      + 'nearby and stationary. It appears here the moment macOS sees it.', 'info', 12000);
+  }
+  cfg.camId = phone.deviceId;
+  el.selCam.value = phone.deviceId;
+  persist();
+  restartCam();
+
+  const phoneMic = devices.mics.find((d) => isPhoneCam(d.label));
+  if (phoneMic && cfg.micId !== phoneMic.deviceId) {
+    toastAction(`Using ${phone.label}. Its microphone is available too.`, 'use its mic', () => {
+      cfg.micId = phoneMic.deviceId;
+      el.selMic.value = phoneMic.deviceId;
+      persist();
+      restartMic();
+    }, 'info');
+  } else {
+    toast(`Using ${phone.label}.`, 'info', 3000);
+  }
 }
 
 function screenError(e) {
@@ -387,14 +522,17 @@ function drawFrame() {
     else ctx.drawImage(cam, sx, sy, sw, sh, x, y, bw, bh);
     ctx.restore();
 
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,.85)';
-    ctx.lineWidth = Math.max(1, W * 0.0022);
-    ctx.beginPath();
-    if (cfg.camShape === 'circle') ctx.arc(x + bw / 2, y + bh / 2, bw / 2, 0, Math.PI * 2);
-    else ctx.roundRect(x, y, bw, bh, bw * 0.06);
-    ctx.stroke();
-    ctx.restore();
+    if (cfg.camFrame !== 'none') {
+      // A hairline reads as a frame at any size; the old 4px ring read as a sticker.
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,.24)';
+      ctx.lineWidth = Math.max(1, W * 0.0009);
+      ctx.beginPath();
+      if (cfg.camShape === 'circle') ctx.arc(x + bw / 2, y + bh / 2, bw / 2, 0, Math.PI * 2);
+      else ctx.roundRect(x, y, bw, bh, bw * RADIUS);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 
@@ -926,20 +1064,31 @@ function pushPrompterCfg() {
 
 async function refreshDevices() {
   const list = await navigator.mediaDevices.enumerateDevices();
-  const fill = (sel, kind, chosen) => {
-    const items = list.filter((d) => d.kind === kind);
+  devices.cams = list.filter((d) => d.kind === 'videoinput');
+  devices.mics = list.filter((d) => d.kind === 'audioinput');
+
+  const fill = (sel, items, chosen, noun) => {
     sel.innerHTML = '';
-    if (!items.length) sel.innerHTML = '<option value="">none found</option>';
+    if (!items.length) { sel.innerHTML = '<option value="">none found</option>'; return; }
     items.forEach((d, i) => {
       const o = document.createElement('option');
       o.value = d.deviceId;
-      o.textContent = d.label || kind.replace('input', ' ') + ' ' + (i + 1);
+      o.textContent = (isPhoneCam(d.label) ? '📱 ' : '') + (d.label || `${noun} ${i + 1}`);
       if (d.deviceId === chosen) o.selected = true;
       sel.appendChild(o);
     });
   };
-  fill(el.selCam, 'videoinput', cfg.camId);
-  fill(el.selMic, 'audioinput', cfg.micId);
+  fill(el.selCam, devices.cams, cfg.camId, 'camera');
+  fill(el.selMic, devices.mics, cfg.micId, 'microphone');
+
+  const named = devices.cams.some((d) => d.label);
+  const phone = devices.cams.find((d) => isPhoneCam(d.label));
+  const missing = cfg.camId && !devices.cams.some((d) => d.deviceId === cfg.camId);
+  el.camHint.textContent =
+    !named ? `${devices.cams.length} camera(s) · names appear once you allow camera access`
+    : phone ? `${devices.cams.length} cameras · 📱 ${phone.label} ready`
+    : `${devices.cams.length} camera(s) · no iPhone detected`
+    + (missing ? ' · your chosen camera is not connected' : '');
 }
 
 async function refreshSources() {
@@ -1089,21 +1238,19 @@ function wire() {
     a.download = (deck.title || 'deck').replace(/\s+/g, '-') + '.deck.json';
     a.click();
   };
-  el.btnImport.onclick = () => el.fileImport.click();
-  el.fileImport.onchange = async () => {
-    const f = el.fileImport.files[0];
+  el.btnImport.onclick = () => applyImport(api.importDeck(cfg.wpm));
+
+  // Dropping the file on the pill is the fast path.
+  const stopDrop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  document.addEventListener('dragover', (e) => { stopDrop(e); document.body.classList.add('dropping'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dropping'); });
+  document.addEventListener('drop', (e) => {
+    stopDrop(e);
+    document.body.classList.remove('dropping');
+    const f = e.dataTransfer && e.dataTransfer.files[0];
     if (!f) return;
-    try {
-      const d = JSON.parse(await f.text());
-      if (!d.sections || !d.sections.length) throw new Error('no sections');
-      deck = d;
-      S.cur = 0;
-      renderSection();
-      persist();
-      toast('Deck loaded: ' + (deck.title || f.name), 'info');
-    } catch (e) { toast('That file is not a Lecture Coach deck.'); }
-    el.fileImport.value = '';
-  };
+    applyImport(api.importPath(api.pathForFile(f), cfg.wpm));
+  });
 
   const setCfg = (node, key, get) => {
     node.onchange = node.oninput = () => {
@@ -1113,7 +1260,11 @@ function wire() {
     };
   };
   const val = (n) => n.value, num = (n) => Number(n.value), chk = (n) => n.checked;
-  setCfg(el.selCam, 'camId', val); setCfg(el.selMic, 'micId', val);
+  el.selCam.onchange = () => { cfg.camId = el.selCam.value; persist(); restartCam(); };
+  el.selMic.onchange = () => { cfg.micId = el.selMic.value; persist(); restartMic(); };
+  el.btnUsePhone.onclick = usePhoneCam;
+  setCfg(el.selCamFrame, 'camFrame', val);
+  navigator.mediaDevices.addEventListener('devicechange', onDeviceChange);
   setCfg(el.selQuality, 'quality', val); setCfg(el.selCountdown, 'countdown', num);
   setCfg(el.chkSysAudio, 'systemAudio', chk);
   setCfg(el.selCamShape, 'camShape', val); setCfg(el.selCamPos, 'camPos', val);
@@ -1150,6 +1301,7 @@ function wire() {
       case 'scroll': return api.prompter.cfg({ toggleRun: true });
       case 'lock': return el.btnLock.click();
       case 'mode': return setMode(S.mode === 'edit' ? 'present' : 'edit');
+      case 'import': return applyImport(api.importDeck(cfg.wpm));
       case 'hide': S.ghost = await api.toggleVisible(); return;
     }
   };
@@ -1167,6 +1319,7 @@ function boot() {
   el.selCountdown.value = String(cfg.countdown);
   el.chkSysAudio.checked = cfg.systemAudio;
   el.selCamShape.value = cfg.camShape;
+  el.selCamFrame.value = cfg.camFrame;
   el.selCamPos.value = cfg.camPos;
   el.rngCamSize.value = cfg.camSize;
   el.chkCamMirror.checked = cfg.camMirror;
@@ -1277,4 +1430,91 @@ window.__lcProbeRecord = async (ms) => {
   probe.st.getTracks().forEach((t) => t.stop());
   media.screen = null;
   return { file: saved.file, bytes: saved.bytes, mime, w: el.stage.width, h: el.stage.height };
+};
+
+/* ── verify hooks for the camera bubble ─────────────────────────────────────
+ * A solid-green canvas stands in for the webcam, so the composited frame can be
+ * pixel-checked without a camera or its permission prompt. */
+
+window.__lcProbeBubble = async (shape) => {
+  const c = document.createElement('canvas');
+  c.width = 640; c.height = 360;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#00ff00';
+  cx.fillRect(0, 0, c.width, c.height);
+  const stream = c.captureStream(5);
+
+  const saved = { shape: cfg.camShape, on: cfg.camOn, pos: cfg.camPos, frame: cfg.camFrame };
+  cfg.camShape = shape; cfg.camOn = true; cfg.camPos = 'br'; cfg.camFrame = 'hairline';
+
+  el.vCam.srcObject = stream;
+  await el.vCam.play().catch(() => {});
+  await new Promise((r) => setTimeout(r, 400));
+
+  sizeStage();
+  stageCtx = el.stage.getContext('2d', { alpha: false });
+  drawFrame();
+
+  const W = el.stage.width, H = el.stage.height;
+  const m = W * 0.022;
+  const bw = W * (cfg.camSize / 100);
+  const bh = shape === 'circle' ? bw : bw * 9 / 16;
+  const x = W - bw - m, y = H - bh - m;
+
+  // Copy the bubble into a scratch canvas before reading pixels. Reading from the
+  // stage directly would need willReadFrequently on it, which would deoptimise
+  // the real compositor for the sake of a test.
+  const pad = 6;
+  const scratch = document.createElement('canvas');
+  scratch.width = Math.ceil(bw + pad * 2);
+  scratch.height = Math.ceil(bh + pad * 2);
+  const sc = scratch.getContext('2d', { willReadFrequently: true });
+  sc.drawImage(el.stage, Math.round(x - pad), Math.round(y - pad), scratch.width, scratch.height,
+    0, 0, scratch.width, scratch.height);
+  const at = (X, Y) => {
+    const d = sc.getImageData(Math.round(X - x + pad), Math.round(Y - y + pad), 1, 1).data;
+    return [d[0], d[1], d[2]];
+  };
+
+  // 5% in from the bubble's top-left corner: inside a rectangle, outside a circle
+  const corner = at(x + bw * 0.05, y + bh * 0.05);
+  const centre = at(x + bw / 2, y + bh / 2);
+  // How many rows at the top edge are frame rather than picture. The fill is pure
+  // green, so ANY red/blue means white has been blended in — which is what a
+  // low-alpha hairline looks like (rgb(61,255,61) at 24%), not just a bright ring.
+  const edge = [];
+  let frameRows = 0;
+  for (let i = -2; i < 12; i++) {
+    const p = at(x + bw / 2, y + i);
+    edge.push(p[0]);
+    if (p[0] > 20 && p[2] > 20 && p[1] > 20) frameRows++;
+  }
+
+  Object.assign(cfg, { camShape: saved.shape, camOn: saved.on, camPos: saved.pos, camFrame: saved.frame });
+  stream.getTracks().forEach((t) => t.stop());
+  el.vCam.srcObject = null;
+  return { corner, centre, frameRows, edge, bw: Math.round(bw), bh: Math.round(bh), storedShape: cfg.camShape };
+};
+
+window.__lcProbePhone = () => {
+  const saved = { cams: devices.cams, mics: devices.mics, camId: cfg.camId, previewing: S.previewing };
+  S.previewing = false;                        // keeps restartCam() away from hardware
+  devices = {
+    cams: [{ deviceId: 'built-in', label: 'FaceTime HD Camera' },
+           { deviceId: 'phone-1', label: "Diego's iPhone Camera" }],
+    mics: [{ deviceId: 'mic-built', label: 'MacBook Pro Microphone' },
+           { deviceId: 'mic-phone', label: "Diego's iPhone Microphone" }],
+  };
+  usePhoneCam();
+  const picked = cfg.camId;
+  const classified = {
+    iphone: isPhoneCam("Diego's iPhone Camera"),
+    ipad: isPhoneCam('iPad Pro Camera'),
+    facetime: isPhoneCam('FaceTime HD Camera'),
+    virtual: isPhoneCam('OBS Virtual Camera'),
+  };
+  devices = { cams: saved.cams, mics: saved.mics };
+  cfg.camId = saved.camId;
+  S.previewing = saved.previewing;
+  return { picked, classified, attempts: cfg.camId ? 3 : 1 };
 };

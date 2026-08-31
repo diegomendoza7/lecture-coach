@@ -44,6 +44,111 @@ PASS  recorder wrote a real file  (0.47 MB video/mp4 1920x1080)
 ALL PASS (15/15)
 ```
 
+## The camera bubble
+
+A **rectangle** with a **hairline frame**, bottom-right, mirrored, at 24% of frame
+width. Settings → Camera bubble changes shape (rectangle / circle), corner,
+size, mirror, and frame (hairline / none).
+
+The frame is a 1px, 24%-white stroke — it separates the bubble from a dark slide
+without reading as a sticker, and a drop shadow does most of the separating work.
+`npm run verify` measures it by compositing a solid-green stand-in camera and
+reading the red channel down the bubble's top edge:
+
+```
+PASS  bubble frame is present but a hairline, not a ring
+      (3 frame rows; red channel down the edge = [64,61,31,0,0,0,…])
+```
+
+A ring would read `[217,217,217,217,…]`. The same probe checks the corners are
+filled, which is what distinguishes a rectangle from a circle in pixels rather
+than in config. Existing configs are migrated to the rectangle once (`cfg._v`).
+
+## Using an iPhone as the camera
+
+Settings → Camera → **use iPhone**. An iPhone running as a Continuity Camera is
+an ordinary `videoinput` device, so the camera dropdown lists it with a 📱 marker
+and the hint line under it says whether one is visible right now.
+
+What it needs: iOS 17+, the same Apple ID, Wi-Fi and Bluetooth on, Continuity
+Camera enabled in iPhone Settings → General → AirPlay & Continuity, and the phone
+nearby and stationary. If none is found, the app says exactly that list rather
+than failing silently.
+
+The interesting part is that an iPhone camera **comes and goes** — it drops when
+the phone is picked up, locked, or carried away. So the chosen camera is treated
+as a *preference*, never a requirement:
+
+- Acquisition falls back **exact → preferred → any**, so a missing iPhone does
+  not break the take; you get another camera instead.
+- A dropped track re-acquires automatically and tells you what happened.
+- `devicechange` is watched, so when the phone comes back the stream **switches
+  back to it on its own**.
+- Camera and microphone changes now take effect immediately instead of at the
+  next preview restart (microphone changes are refused mid-take, since the audio
+  track is already muxed into the recording).
+- If you pick the iPhone camera and its microphone is also available, a toast
+  offers to switch to that too — it is usually the better microphone.
+
+`NSCameraUseContinuityCameraDeviceType` is set in the bundle. Recent Electron
+links a new enough SDK to discover Continuity Camera without it; it is harmless
+belt-and-braces.
+
+**Not verified on real hardware.** No iPhone was visible to this Mac while this
+was built, so the selection logic is tested with a stubbed device list (it must
+recognise "iPhone"/"iPad" labels, ignore "FaceTime HD Camera" and "OBS Virtual
+Camera", and pick the phone) — but the live connect/drop/reconnect path has not
+been exercised against an actual phone.
+
+## Importing a talk
+
+Drop a file on the pill, or **Settings → Import a talk…** (⌘O). No typing, no
+sorting. Nothing is installed to make this work — macOS already ships every
+parser needed:
+
+| Format | Read with | Becomes |
+| --- | --- | --- |
+| `.pptx` | `unzip` → `ppt/slides/slideN.xml` + `notesSlides/` | one section per slide, **speaker notes** as the notes (slide bullets if a slide has none), slide cues set |
+| `.pdf` | `osascript -l JavaScript` → Quartz `PDFDocument` | slide-per-page with cues, or a chunked document — see below |
+| `.docx` | `unzip` → `word/document.xml` (keeps `w:pStyle`) | one section per heading |
+| `.doc` `.rtf` `.odt` `.html` | `textutil -convert txt` | sections by heading-ish lines, else by length |
+| `.md` `.txt` | read directly | `##` headings become sections, bullets and `**bold**` survive |
+| `.json` | — | a deck previously exported from this app |
+
+Every section also gets a **target duration** computed from its own word count at
+your words-per-minute, so the pacing bar is meaningful the moment the import
+finishes. One level of undo is kept: the toast has an `undo` link.
+
+Three details that make the results usable rather than merely present:
+
+- **Slide cues come free from slide-based sources.** Section N starts on slide N,
+  which is exactly what the slide-change detector auto-advances on — so importing
+  a `.pptx` and enabling auto-advance gives a take that needs no keyboard.
+- **Headings split at one level, not all of them.** A structured document has
+  `Heading1` through `Heading4`; splitting at every level turned a real 68-heading
+  business plan into 69 four-line sections. The importer picks the coarsest level
+  that still yields at least three sections (that plan becomes 13) and keeps the
+  deeper headings inline as bold cues, so nothing is lost.
+- **A PDF is read as slides or as prose, not both.** Under ~900 characters per
+  page it is treated as a deck (section per page, cues set); above that as a
+  document (reflowed and chunked into ~170-word sections, no cues, because there
+  page ≠ slide).
+
+### The PDF reflow
+
+PDFKit returns *text runs*, not lines, so a phrase can arrive as
+`"O" / "ur approach" / "Stru" / "ctural screen"`. The next fragment's first
+character disambiguates: lowercase means the break is inside a word or a wrapped
+sentence, uppercase means a real new line. Whether to restore a space depends on
+how much text preceded the break — a few characters is a split glyph run, a full
+line is a wrapped sentence. That reconstructs both `Our approach` and
+`…persisted across replicates…` correctly from the same rule.
+
+Known limits: a **scanned** PDF has no text layer and is rejected with a message
+saying so rather than importing an empty deck. **Keynote** `.key` files are a
+proprietary protobuf format — export to PowerPoint or PDF first, which the error
+message tells you.
+
 ## Slide-change detection
 
 The screen stream is downsampled to a 64x36 luma grid five times a second (2304
@@ -210,6 +315,11 @@ things that only break after packaging:
 LC_SMOKE=deep "dist/mac-arm64/Lecture Coach.app/Contents/MacOS/Lecture Coach"
 ```
 
+The deep suite needs the **display awake and the screen unlocked** — it works by
+reading pixels back out of a live capture, and a locked screen renders no windows
+into that stream. It detects this and prints `SKIP` for the affected checks
+instead of four misleading failures.
+
 Note that launching from a terminal inherits the terminal's Screen Recording
 grant. Launched from Finder the app is its own responsible process and macOS will
 prompt for it separately — that prompt is expected on first run.
@@ -220,6 +330,8 @@ prompt for it separately — that prompt is expected on first run.
 main.js       windows, content protection, display-media handler, global shortcuts,
               streaming file writer, macOS privacy queries
 preload.js    contextBridge surface (contextIsolation is on, nodeIntegration is off)
+importer.js   pptx / pdf / docx / doc / md import. Deliberately Electron-free, so
+              it unit-tests under plain node: tools/test-import.js <file> [--quiet]
 index.html    the pill: drag strip, left control column, right notes column, sheets
 styles.css    dark glass, three modes (edit / present / compact)
 renderer.js   deck + sections, clocks, canvas compositor, audio graph, MediaRecorder,
