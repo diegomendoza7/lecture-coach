@@ -1,0 +1,52 @@
+{
+  "pauses": {
+    "file": "/Users/diegomendoza/lecture-coach/analysis/tests/fixtures/pauses.wav",
+    "gaps": [
+      {
+        "start": 3.616625,
+        "end": 3.916625,
+        "duration": 0.3
+      },
+      {
+        "start": 5.990687,
+        "end": 6.740687,
+        "duration": 0.75
+      },
+      {
+        "start": 10.430438,
+        "end": 11.830438,
+        "duration": 1.4
+      },
+      {
+        "start": 14.859438,
+        "end": 15.079438,
+        "duration": 0.22
+      }
+    ],
+    "n_words": 55,
+    "speech_time_s": 14.1576,
+    "total_duration_s": 17.3276,
+    "transcript": "The rainbow is a division of white light into many beautiful colors These take the shape of a long round arch With its path high above and its two ends apparently beyond the horizon There is according to legend a boiling pot of gold at one end People look but no one ever finds it"
+  },
+  "disfluent": {
+    "file": "/Users/diegomendoza/lecture-coach/analysis/tests/fixtures/disfluent.wav",
+    "transcript": "So um today I want to talk about uh the results of our study The the data shows that like a significant improvement And you know we we found that uh basically it works I mean the the conclusion is you know pretty clear",
+    "n_words": 44,
+    "n_filled_pauses": 3,
+    "n_repetitions": 3,
+    "n_discourse_markers": 5,
+    "duration_s": 12.7026
+  },
+  "tone": {
+    "file": "/Users/diegomendoza/lecture-coach/analysis/tests/fixtures/tone_120.wav",
+    "f0_hz": 120.0,
+    "duration_s": 3.0
+  },
+  "glide": {
+    "file": "/Users/diegomendoza/lecture-coach/analysis/tests/fixtures/glide_100_200.wav",
+    "f0_lo_hz": 100.0,
+    "f0_hi_hz": 200.0,
+    "semitone_range": 12.0,
+    "duration_s": 3.0
+  }
+}

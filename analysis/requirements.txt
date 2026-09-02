@@ -1,0 +1,8 @@
+# Apple Silicon. mlx-whisper needs an M-series GPU; everything else is portable.
+numpy>=2.0
+scipy>=1.14
+soundfile>=0.13
+av>=15.0             # bundles ffmpeg, so no system ffmpeg needed
+praat-parselmouth>=0.4.7
+onnxruntime>=1.20    # runs the vendored Silero VAD
+mlx-whisper>=0.4     # ASR, Metal-accelerated
