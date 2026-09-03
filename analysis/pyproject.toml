@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speechlab"
+version = "0.1.0"
+description = "Speech measurement layer for Lecture Coach takes"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.0", "scipy>=1.14", "soundfile>=0.13", "av>=15.0",
+  "praat-parselmouth>=0.4.7", "onnxruntime>=1.20", "mlx-whisper>=0.4",
+]
+
+[project.optional-dependencies]
+record = ["sounddevice>=0.4"]   # tools/record.py only; the web app records in-browser
+
+[project.scripts]
+speechlab = "speechlab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["speechlab*"]
+
+[tool.setuptools.package-data]
+speechlab = ["models/*.onnx", "models/*.LICENSE", "web/static/*"]

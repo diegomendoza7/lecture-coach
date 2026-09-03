@@ -1,10 +1,31 @@
 # speechlab — measurement layer
 
-Analyses one Lecture Coach take and writes a `*.speech.json` sidecar next to it,
-alongside the `*.session.json` that `main.js` already produces.
+Analyses Lecture Coach takes and writes a `*.speech.json` sidecar next to each
+one, alongside the `*.session.json` that `main.js` already produces.
+
+## Web app (no terminal after the first command)
 
 ```bash
-.venv/bin/python -m speechlab ~/Movies/"Lecture Coach"/take_2026-09-01_143022.mp4
+.venv/bin/speechlab web
+```
+
+Opens http://127.0.0.1:8765 — record from the browser, browse every take in
+`~/Movies/Lecture Coach`, and read results in the same page. Bound to localhost;
+nothing is exposed off the machine. `--takes-dir`, `--port` and `--language`
+override the defaults.
+
+Recording uses `echoCancellation`, `noiseSuppression` and `autoGainControl` all
+**off**: this is the analysis feed, and browser noise suppression is nonlinear —
+it eats the quiet passages and breaths that prosody and breath detection depend
+on, while AGC flattens the very energy dynamics being measured.
+
+Analysis runs in-process on a worker thread, so the Whisper weights stay
+resident: the first take of a session pays the model load, the rest are seconds.
+
+## CLI
+
+```bash
+.venv/bin/speechlab ~/Movies/"Lecture Coach"/take_2026-09-01_143022.mp4
 ```
 
 Writes three files next to the take: a readable terminal summary, the
@@ -22,7 +43,7 @@ To test without Electron, record straight from the mic:
 
 ```bash
 .venv/bin/python tools/record.py 60          # writes take_<timestamp>.wav
-.venv/bin/python -m speechlab take_*.wav --language en
+.venv/bin/speechlab take_*.wav --language en
 ```
 
 The first recording will need Terminal granted microphone access in System
@@ -35,7 +56,7 @@ one-time Whisper weight download from Hugging Face.
 ## Setup
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -e .
 ```
 
 Apple Silicon only, because ASR runs through MLX on the GPU. The acoustic half
@@ -44,9 +65,16 @@ Apple Silicon only, because ASR runs through MLX on the GPU. The acoustic half
 ## Verify
 
 ```bash
-.venv/bin/python tests/test_smoke.py       # 31 checks
-SL_FAST=1 .venv/bin/python tests/test_smoke.py   # 21, skips ASR
+.venv/bin/python tests/test_smoke.py             # 35 checks
+SL_FAST=1 .venv/bin/python tests/test_smoke.py   # skips ASR
 ```
+
+The suite exits via `os._exit`. With PyAV, onnxruntime, MLX and a subprocess all
+exercised in one process, interpreter teardown intermittently aborts in a C++
+static destructor (SIGABRT, seen on 2 of 3 runs) *after* every check has already
+run and printed — which would turn a fully passing suite into a failing exit
+status. That is a workaround for a native teardown race, not a fix, and it
+affects nothing the suite asserts.
 
 Fixtures are generated, not committed: `tests/make_fixtures.py` builds speech
 with macOS `say` and concatenates it with sample-exact silences, so pause ground
@@ -151,10 +179,24 @@ no number. The smoke suite asserts no field named `*score*` exists.
   to each take's own voicing rate, not as an absolute. The real fix is recording
   hotter: aim for peaks around -12 dBFS and SNR above 20 dB.
 
-## Integration (not built yet)
+## One renderer, two hosts
 
-`main.js` already has the seam: `file:save-sidecar` writes `${base}.session.json`.
-The plan is a `speech:analyze` IPC handler that spawns this CLI on the finished
-take, writes `${base}.speech.json`, and lets the take report render the
-contours and a clickable pause/filler timeline — every metric seekable to the
-audio that produced it.
+`web/static/report.js` is the entire results view — timeline, cards, lists,
+transcript. It is mounted twice and implemented once:
+
+  * the web app mounts it against a served `/api/audio/<take>` URL;
+  * `viewer.py` inlines that same file (plus `style.css`) into a standalone
+    `*.speech.html` export that points at the audio sitting beside it on disk.
+
+The smoke suite asserts the export contains the file byte-for-byte, so the two
+views cannot drift.
+
+## Integration into Lecture Coach (not built yet)
+
+`main.js` already has the seam: `file:save-sidecar` writes
+`${base}.session.json`. The remaining work is a `speech:analyze` IPC handler
+that runs the analysis on a finished take and writes `${base}.speech.json`, and
+an Electron view that loads `report.js` and calls `SpeechReport.render(...)`.
+Because the renderer takes plain JSON plus an audio URL, the Electron host only
+has to swap the four `fetch()` calls in `app.js` for IPC — the results view
+itself needs no changes.

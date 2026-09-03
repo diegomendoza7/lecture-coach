@@ -228,11 +228,16 @@ def main() -> int:
 
             html = viewer.render(j, FIXTURES / "cli_out.html", Path(d["file"]))
             body = html.read_text()
-            check("HTML report renders with data and a relative audio path",
+            check("HTML export inlines data and points at the sibling audio",
                   html.stat().st_size > 8000
                   and "__DATA__" not in body and "__AUDIO__" not in body
-                  and 'src="disfluent.wav"' in body,
+                  and "__CSS__" not in body and "__REPORT_JS__" not in body
+                  and 'audioUrl: "disfluent.wav"' in body,
                   f"{html.stat().st_size} bytes")
+            check("export and web app share one renderer",
+                  "window.SpeechReport" in body
+                  and (Path(__file__).resolve().parents[1] / "speechlab" / "web"
+                       / "static" / "report.js").read_text()[:80] in body)
 
     n_pass = sum(1 for r, _, _ in RESULTS if r == "PASS")
     n_fail = sum(1 for r, _, _ in RESULTS if r == "FAIL")
@@ -246,4 +251,19 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _code = main()
+    # Exit through os._exit rather than SystemExit.
+    #
+    # With PyAV, onnxruntime, MLX and a subprocess all exercised in one process,
+    # interpreter teardown intermittently aborts in a C++ static destructor
+    # ("recursive_mutex lock failed", SIGABRT/134) - observed on 2 of 3 runs.
+    # It happens AFTER every check has run and printed, so left alone it turns a
+    # fully passing suite into a failing exit status and would break any CI or
+    # `npm run verify` integration.
+    #
+    # This is a workaround, not a fix: the race is in native teardown, not in
+    # anything the suite asserts. Nothing after this point needs to run, so the
+    # exit status is made to reflect the checks.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(_code)

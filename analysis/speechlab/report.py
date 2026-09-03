@@ -58,11 +58,18 @@ def analyze(
     language: str | None = None,
     run_asr: bool = True,
     contours: bool = True,
+    on_progress=None,
 ) -> dict:
+    """`on_progress(stage, fraction)` is called as work completes, so a UI can
+    show something during the ASR pass - by far the slowest stage."""
+    step = on_progress or (lambda *_: None)
+    step("decoding audio", 0.05)
     a = _audio.load(path)
     quality = _audio.quality(a)
 
+    step("detecting speech", 0.15)
     segs, _probs = _vad.detect(a.samples, a.sr)
+    step("measuring pitch and energy", 0.32)
     pros = _prosody.extract(a.samples, a.sr)
     pause_list = _timing.pauses(segs, a.duration)
     t_sum = _timing.summarize(segs, pause_list, a.duration)
@@ -81,9 +88,12 @@ def analyze(
 
     if not run_asr:
         out["note"] = "ASR skipped: rate, disfluency and vocabulary omitted"
+        step("done", 1.0)
         return out
 
+    step("transcribing", 0.45)
     tr = _asr.transcribe(a.samples, a.sr, model=model, language=language)
+    step("analysing words", 0.92)
     cov = _asr.coverage(tr["words"], segs)
     vocab = _lexical.analyze(tr["text"])
 
@@ -103,6 +113,7 @@ def analyze(
         "vocabulary": vocab,
         "asr_coverage": {k: v for k, v in cov.items() if k != "unaccounted_regions"},
     }
+    step("done", 1.0)
     return out
 
 

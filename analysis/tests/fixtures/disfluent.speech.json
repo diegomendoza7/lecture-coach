@@ -1,0 +1,739 @@
+{
+  "schema": "speechlab/1",
+  "generated_at": "2026-09-03T01:17:06-04:00",
+  "source": {
+    "path": "/Users/diegomendoza/lecture-coach/analysis/tests/fixtures/disfluent.wav",
+    "duration_s": 12.703
+  },
+  "quality": {
+    "usable": true,
+    "duration_s": 12.703,
+    "source_sample_rate": 16000,
+    "source_channels": 1,
+    "peak_dbfs": -3.1,
+    "clipped_fraction": 0.0,
+    "dc_offset": -0.00026,
+    "noise_floor_dbfs": -49.8,
+    "speech_level_dbfs": -14.2,
+    "snr_db": 35.6,
+    "warnings": []
+  },
+  "timing": {
+    "total_duration_s": 12.703,
+    "speaking_span_s": 12.438,
+    "phonation_time_s": 10.842,
+    "phonation_ratio": 0.8717,
+    "pause_ratio": 0.1283,
+    "n_speech_segments": 4,
+    "n_pauses": 3,
+    "pauses_per_minute": 14.47,
+    "pause_counts": {
+      "micro": 0,
+      "short": 0,
+      "long": 3,
+      "extended": 0
+    },
+    "pause_median_s": 0.528,
+    "pause_mean_s": 0.532,
+    "pause_p90_s": 0.538,
+    "pause_longest_s": 0.541,
+    "pause_total_s": 1.595
+  },
+  "prosody": {
+    "voiced_frames": 878,
+    "voiced_ratio": 0.81,
+    "pitch_floor_hz": 106.8,
+    "pitch_ceiling_hz": 336.6,
+    "f0_median_hz": 169.5,
+    "f0_sd_st": 2.297,
+    "f0_range_st": 7.332,
+    "f0_iqr_st": 2.729,
+    "energy_median_dbfs": -16.27,
+    "energy_sd_db": 8.798,
+    "energy_range_db": 26.189
+  },
+  "pauses": [
+    {
+      "start": 3.441,
+      "end": 3.969,
+      "duration": 0.528,
+      "kind": "long"
+    },
+    {
+      "start": 6.603,
+      "end": 7.144,
+      "duration": 0.541,
+      "kind": "long"
+    },
+    {
+      "start": 9.616,
+      "end": 10.143,
+      "duration": 0.527,
+      "kind": "long"
+    }
+  ],
+  "contours": {
+    "step_s": 0.1,
+    "f0_st": [
+      null,
+      null,
+      null,
+      null,
+      4.76,
+      2.66,
+      1.83,
+      null,
+      -0.9,
+      1.22,
+      2.21,
+      0.26,
+      -0.5,
+      0.71,
+      null,
+      -2.13,
+      null,
+      0.79,
+      null,
+      -0.83,
+      -2.63,
+      null,
+      -1.54,
+      -2.4,
+      -1.19,
+      null,
+      0.15,
+      null,
+      -1.94,
+      -1.6,
+      -3.13,
+      null,
+      -1.98,
+      -5.34,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      0.29,
+      -0.38,
+      0.18,
+      3.96,
+      3.16,
+      null,
+      2.4,
+      0.18,
+      null,
+      -1.18,
+      -1.49,
+      -0.0,
+      -0.91,
+      -2.06,
+      null,
+      -1.25,
+      -0.22,
+      3.15,
+      1.44,
+      2.32,
+      -0.9,
+      -1.32,
+      null,
+      -0.36,
+      -2.62,
+      -6.56,
+      -7.16,
+      null,
+      null,
+      null,
+      null,
+      null,
+      1.21,
+      0.97,
+      0.3,
+      3.51,
+      2.85,
+      -0.53,
+      -0.6,
+      null,
+      0.74,
+      0.3,
+      -0.26,
+      -1.66,
+      -0.34,
+      0.96,
+      0.74,
+      null,
+      0.27,
+      1.61,
+      0.83,
+      -1.74,
+      -1.6,
+      -4.73,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      1.43,
+      0.92,
+      2.33,
+      0.17,
+      -0.65,
+      null,
+      -1.05,
+      null,
+      1.55,
+      1.34,
+      null,
+      0.68,
+      -3.52,
+      0.17,
+      0.21,
+      1.28,
+      null,
+      1.65,
+      -0.19,
+      null,
+      0.88,
+      -2.64,
+      -7.29,
+      null,
+      null
+    ],
+    "energy_db": [
+      -50.3,
+      -49.9,
+      -37.0,
+      -17.8,
+      -15.1,
+      -15.3,
+      -13.8,
+      -15.0,
+      -19.7,
+      -14.7,
+      -15.4,
+      -16.3,
+      -14.6,
+      -16.2,
+      -24.2,
+      -33.2,
+      -15.3,
+      -16.4,
+      -15.4,
+      -15.0,
+      -15.7,
+      -15.1,
+      -24.7,
+      -18.5,
+      -14.5,
+      -21.2,
+      -15.9,
+      -32.0,
+      -24.4,
+      -15.6,
+      -25.2,
+      -26.3,
+      -16.2,
+      -17.7,
+      -25.3,
+      -49.9,
+      -50.5,
+      -50.1,
+      -49.7,
+      -50.1,
+      -15.7,
+      -15.9,
+      -15.5,
+      -14.8,
+      -14.9,
+      -21.0,
+      -14.3,
+      -15.1,
+      -43.0,
+      -15.1,
+      -23.3,
+      -15.5,
+      -39.9,
+      -19.0,
+      -32.2,
+      -23.9,
+      -14.1,
+      -41.6,
+      -17.5,
+      -13.7,
+      -30.5,
+      -19.9,
+      -15.2,
+      -14.8,
+      -14.5,
+      -18.7,
+      -46.5,
+      -50.4,
+      -50.1,
+      -50.2,
+      -49.6,
+      -49.6,
+      -13.0,
+      -13.0,
+      -13.1,
+      -14.7,
+      -17.2,
+      -13.8,
+      -13.9,
+      -44.5,
+      -15.3,
+      -15.0,
+      -15.9,
+      -19.9,
+      -18.5,
+      -15.2,
+      -15.0,
+      -29.6,
+      -33.2,
+      -14.0,
+      -14.0,
+      -39.6,
+      -14.9,
+      -17.4,
+      -33.0,
+      -34.4,
+      -39.5,
+      -49.7,
+      -50.1,
+      -49.4,
+      -49.8,
+      -49.7,
+      -14.9,
+      -13.0,
+      -12.9,
+      -14.7,
+      -15.1,
+      -30.4,
+      -14.6,
+      -33.9,
+      -13.7,
+      -15.6,
+      -18.1,
+      -14.0,
+      -26.4,
+      -13.4,
+      -13.7,
+      -15.5,
+      -36.6,
+      -15.4,
+      -14.1,
+      -38.2,
+      -14.5,
+      -15.5,
+      -20.2,
+      -49.1,
+      -50.2
+    ]
+  },
+  "transcript": {
+    "language": "en",
+    "model": "mlx-community/whisper-large-v3-turbo",
+    "text": "So, um, today I want to talk about, uh, the results of our study. The, the data shows that, like, a significant improvement. And you know, we, we found that, uh, basically it works. I mean, the, the conclusion is, you know, pretty clear.",
+    "words": [
+      {
+        "word": "So,",
+        "start": 0.0,
+        "end": 0.42,
+        "prob": 0.959
+      },
+      {
+        "word": "um,",
+        "start": 0.58,
+        "end": 0.62,
+        "prob": 0.739
+      },
+      {
+        "word": "today",
+        "start": 0.68,
+        "end": 0.88,
+        "prob": 1.0
+      },
+      {
+        "word": "I",
+        "start": 0.88,
+        "end": 1.08,
+        "prob": 0.974
+      },
+      {
+        "word": "want",
+        "start": 1.08,
+        "end": 1.34,
+        "prob": 1.0
+      },
+      {
+        "word": "to",
+        "start": 1.34,
+        "end": 1.5,
+        "prob": 1.0
+      },
+      {
+        "word": "talk",
+        "start": 1.5,
+        "end": 1.76,
+        "prob": 1.0
+      },
+      {
+        "word": "about,",
+        "start": 1.76,
+        "end": 2.06,
+        "prob": 0.999
+      },
+      {
+        "word": "uh,",
+        "start": 2.18,
+        "end": 2.18,
+        "prob": 0.881
+      },
+      {
+        "word": "the",
+        "start": 2.3,
+        "end": 2.32,
+        "prob": 1.0
+      },
+      {
+        "word": "results",
+        "start": 2.32,
+        "end": 2.66,
+        "prob": 1.0
+      },
+      {
+        "word": "of",
+        "start": 2.66,
+        "end": 2.84,
+        "prob": 1.0
+      },
+      {
+        "word": "our",
+        "start": 2.84,
+        "end": 2.98,
+        "prob": 1.0
+      },
+      {
+        "word": "study.",
+        "start": 2.98,
+        "end": 3.38,
+        "prob": 1.0
+      },
+      {
+        "word": "The,",
+        "start": 3.68,
+        "end": 4.04,
+        "prob": 0.945
+      },
+      {
+        "word": "the",
+        "start": 4.06,
+        "end": 4.16,
+        "prob": 0.999
+      },
+      {
+        "word": "data",
+        "start": 4.16,
+        "end": 4.4,
+        "prob": 0.999
+      },
+      {
+        "word": "shows",
+        "start": 4.4,
+        "end": 4.74,
+        "prob": 1.0
+      },
+      {
+        "word": "that,",
+        "start": 4.74,
+        "end": 4.98,
+        "prob": 1.0
+      },
+      {
+        "word": "like,",
+        "start": 4.98,
+        "end": 5.2,
+        "prob": 0.992
+      },
+      {
+        "word": "a",
+        "start": 5.26,
+        "end": 5.34,
+        "prob": 1.0
+      },
+      {
+        "word": "significant",
+        "start": 5.34,
+        "end": 5.88,
+        "prob": 1.0
+      },
+      {
+        "word": "improvement.",
+        "start": 5.88,
+        "end": 6.46,
+        "prob": 1.0
+      },
+      {
+        "word": "And",
+        "start": 6.9,
+        "end": 7.26,
+        "prob": 1.0
+      },
+      {
+        "word": "you",
+        "start": 7.26,
+        "end": 7.4,
+        "prob": 0.822
+      },
+      {
+        "word": "know,",
+        "start": 7.4,
+        "end": 7.54,
+        "prob": 1.0
+      },
+      {
+        "word": "we,",
+        "start": 7.64,
+        "end": 7.72,
+        "prob": 0.991
+      },
+      {
+        "word": "we",
+        "start": 7.74,
+        "end": 7.84,
+        "prob": 1.0
+      },
+      {
+        "word": "found",
+        "start": 7.84,
+        "end": 8.14,
+        "prob": 0.998
+      },
+      {
+        "word": "that,",
+        "start": 8.14,
+        "end": 8.32,
+        "prob": 1.0
+      },
+      {
+        "word": "uh,",
+        "start": 8.36,
+        "end": 8.46,
+        "prob": 0.999
+      },
+      {
+        "word": "basically",
+        "start": 8.86,
+        "end": 8.86,
+        "prob": 1.0
+      },
+      {
+        "word": "it",
+        "start": 8.86,
+        "end": 9.12,
+        "prob": 0.903
+      },
+      {
+        "word": "works.",
+        "start": 9.12,
+        "end": 9.5,
+        "prob": 1.0
+      },
+      {
+        "word": "I",
+        "start": 9.88,
+        "end": 10.24,
+        "prob": 1.0
+      },
+      {
+        "word": "mean,",
+        "start": 10.24,
+        "end": 10.44,
+        "prob": 1.0
+      },
+      {
+        "word": "the,",
+        "start": 10.52,
+        "end": 10.56,
+        "prob": 0.897
+      },
+      {
+        "word": "the",
+        "start": 10.56,
+        "end": 10.68,
+        "prob": 1.0
+      },
+      {
+        "word": "conclusion",
+        "start": 10.68,
+        "end": 11.18,
+        "prob": 1.0
+      },
+      {
+        "word": "is,",
+        "start": 11.18,
+        "end": 11.42,
+        "prob": 0.988
+      },
+      {
+        "word": "you",
+        "start": 11.46,
+        "end": 11.56,
+        "prob": 1.0
+      },
+      {
+        "word": "know,",
+        "start": 11.56,
+        "end": 11.7,
+        "prob": 1.0
+      },
+      {
+        "word": "pretty",
+        "start": 11.82,
+        "end": 11.98,
+        "prob": 1.0
+      },
+      {
+        "word": "clear.",
+        "start": 11.98,
+        "end": 12.34,
+        "prob": 1.0
+      }
+    ]
+  },
+  "rate": {
+    "n_words": 44,
+    "words_per_minute": 212.3,
+    "syllables_per_second": 4.904,
+    "articulation_rate_syl_per_s": 5.626
+  },
+  "disfluency": {
+    "filled_pauses": [
+      {
+        "word": "um",
+        "time": 0.58,
+        "duration": 0.04
+      },
+      {
+        "word": "uh",
+        "time": 2.18,
+        "duration": 0.0
+      },
+      {
+        "word": "uh",
+        "time": 8.36,
+        "duration": 0.1
+      }
+    ],
+    "filled_pause_count": 3,
+    "discourse_markers": [
+      {
+        "phrase": "like",
+        "time": 4.98,
+        "context": "the data shows that, [like,] a significant improvement. And"
+      },
+      {
+        "phrase": "you know",
+        "time": 7.26,
+        "context": "a significant improvement. And [you know,] we, we found that,"
+      },
+      {
+        "phrase": "basically",
+        "time": 8.86,
+        "context": "we found that, uh, [basically] it works. I mean,"
+      },
+      {
+        "phrase": "i mean",
+        "time": 9.88,
+        "context": "uh, basically it works. [I mean,] the, the conclusion is,"
+      },
+      {
+        "phrase": "you know",
+        "time": 11.46,
+        "context": "the, the conclusion is, [you know,] pretty clear."
+      }
+    ],
+    "discourse_marker_counts": {
+      "like": 1,
+      "you know": 2,
+      "basically": 1,
+      "i mean": 1
+    },
+    "repetitions": [
+      {
+        "phrase": "the",
+        "words": 1,
+        "time": 3.68,
+        "context": "results of our study. [The, the] data shows that, like,"
+      },
+      {
+        "phrase": "we",
+        "words": 1,
+        "time": 7.64,
+        "context": "improvement. And you know, [we, we] found that, uh, basically"
+      },
+      {
+        "phrase": "the",
+        "words": 1,
+        "time": 10.52,
+        "context": "it works. I mean, [the, the] conclusion is, you know,"
+      }
+    ],
+    "repetition_count": 3,
+    "acoustic_candidates": [],
+    "unaccounted_regions": [
+      {
+        "start": 0.42,
+        "end": 0.58,
+        "duration": 0.16,
+        "voiced_ratio": 1.0,
+        "f0_sd_st": 2.1,
+        "kind": "breath_or_unvoiced"
+      },
+      {
+        "start": 8.46,
+        "end": 8.86,
+        "duration": 0.4,
+        "voiced_ratio": 0.775,
+        "f0_sd_st": 1.12,
+        "kind": "possible_filler"
+      },
+      {
+        "start": 12.34,
+        "end": 12.672,
+        "duration": 0.332,
+        "voiced_ratio": 0.353,
+        "f0_sd_st": 1.23,
+        "kind": "breath_or_unvoiced"
+      }
+    ],
+    "acoustic_candidate_count": 0,
+    "filled_pauses_estimated_range": [
+      3,
+      3
+    ],
+    "filled_pauses_per_minute": 14.47,
+    "discourse_markers_per_minute": 24.12,
+    "disfluencies_per_100_words": 13.64,
+    "note": "filled_pause_count is a lower bound - Whisper removes many fillers. acoustic_candidates estimates what it removed; add them for a range."
+  },
+  "vocabulary": {
+    "total_tokens": 44,
+    "unique_tokens": 34,
+    "type_token_ratio": 0.7727,
+    "mattr_50": 0.7727,
+    "syllables": 61,
+    "mean_syllables_per_word": 1.386,
+    "mean_word_length": 3.977,
+    "repeated_phrases": [],
+    "mtld_note": "omitted: 44 tokens, MTLD needs >= 100 to be stable"
+  },
+  "asr_coverage": {
+    "speech_time_s": 10.842,
+    "unaccounted_time_s": 0.892,
+    "unaccounted_ratio": 0.0823
+  }
+}

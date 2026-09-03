@@ -1,0 +1,26 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>speechlab</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/app.css">
+</head><body>
+<div class="app">
+  <header>
+    <span class="brand">speechlab</span>
+    <span class="dir" id="dir"></span>
+    <span class="sp"></span>
+    <button id="add">Add file…</button>
+    <button class="rec" id="rec">● Record</button>
+  </header>
+  <div class="body">
+    <aside>
+      <h2>Takes</h2>
+      <div id="takes"></div>
+    </aside>
+    <main id="main"></main>
+  </div>
+</div>
+<input type="file" id="file" accept="audio/*,video/*" hidden>
+<script src="/static/report.js"></script>
+<script src="/static/app.js"></script>
+</body></html>

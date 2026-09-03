@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>disfluent.wav</title>
+<style>
+:root{
+  --bg:#12141a; --panel:#171a22; --panel2:#1b1f29; --line:#262b38; --line2:#1f242f;
+  --text:#e6e8ee; --dim:#8b93a7; --dim2:#6f778c;
+  --accent:#3d6ae0; --accent2:#6f9ff0; --warn:#c98b3a; --bad:#e05a5a; --good:#3fae6d;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+button{font-family:inherit;font-size:13px;cursor:pointer;border-radius:7px;
+  background:#232734;color:var(--text);border:1px solid #363c4d;padding:7px 13px}
+button:hover:not(:disabled){background:#2c3243}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);font-weight:500}
+button.primary:hover:not(:disabled){background:#4d78ea}
+button.rec{background:var(--bad);border-color:var(--bad);font-weight:500}
+button.rec:hover:not(:disabled){background:#ec6a6a}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);
+  margin:0 0 9px;font-weight:600}
+.mono{font-variant-numeric:tabular-nums}
+
+/* ---------------------------------------------------------------- report */
+.rep h1{font-size:19px;margin:0 0 2px;font-weight:600}
+.rep .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+.rep .warn{background:#3a2a12;border:1px solid #7a5a20;color:#f0c987;
+  padding:9px 12px;border-radius:7px;margin:10px 0;font-size:13px}
+.rep .bar{display:flex;align-items:center;gap:12px;margin:14px 0 9px;flex-wrap:wrap}
+.rep .time{font-variant-numeric:tabular-nums;color:#9aa3b8;font-size:13px}
+.tlwrap{overflow-x:auto;overflow-y:hidden;border:1px solid var(--line);
+  border-radius:9px;background:var(--panel)}
+.tlwrap canvas{display:block;cursor:pointer}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--dim);font-size:12px;margin:9px 2px 20px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px;margin-bottom:22px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px 12px}
+.card .k{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.card .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.card .n{color:var(--dim2);font-size:11.5px;margin-top:3px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+.list{background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  max-height:270px;overflow-y:auto}
+.row{display:flex;gap:10px;padding:7px 12px;border-bottom:1px solid var(--line2);
+  cursor:pointer;font-size:13px;align-items:baseline}
+.row:last-child{border-bottom:0}
+.row:hover{background:#1f2431}
+.row .t{color:var(--accent2);font-variant-numeric:tabular-nums;min-width:44px}
+.row .d{color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums;font-size:12px}
+.empty{padding:13px 12px;color:var(--dim2);font-size:13px}
+.tx{background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  padding:15px 17px;line-height:2.1}
+.tx span{cursor:pointer;padding:2px 1px;border-radius:3px}
+.tx span:hover{background:#2c3243}
+.tx span.on{background:var(--accent);color:#fff}
+.tx span.gap{border-bottom:2px solid var(--warn)}
+.note{color:var(--dim2);font-size:12.5px;margin-top:22px;border-top:1px solid var(--line);padding-top:13px}
+
+body{margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding:26px 22px 70px}
+</style></head><body><div class="wrap"><div id="root"></div></div>
+<script>
+/* Shared report renderer.
+ *
+ * One module, two hosts: the local web app mounts it against a served audio
+ * URL, and viewer.py inlines this exact file into a standalone HTML export.
+ * Keeping a single implementation is the point - a second copy would drift.
+ *
+ *   SpeechReport.render(rootElement, reportJson, { audioUrl })
+ */
+window.SpeechReport = (function () {
+  const fmt = (t, dec) => {
+    if (!isFinite(t)) t = 0;
+    const m = Math.floor(t / 60), s = t - m * 60;
+    return m + ':' + (dec ? (s < 10 ? '0' : '') + s.toFixed(1)
+                          : String(Math.floor(s)).padStart(2, '0'));
+  };
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+  const esc = s => String(s).replace(/[&<>"]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function render(root, D, opts) {
+    opts = opts || {};
+    root.innerHTML = '';
+    root.classList.add('rep');
+    const DUR = D.source.duration_s;
+    const unacc = (D.disfluency && D.disfluency.unaccounted_regions) || D.unaccounted || [];
+    const H = 190;
+    let pps = 20, raf = 0;
+
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.hidden = true;
+    if (opts.audioUrl) audio.src = opts.audioUrl;
+    root.appendChild(audio);
+
+    // ------------------------------------------------------------- header
+    root.appendChild(el('h1', null, esc(D.source.name || (D.source.path || '').split('/').pop())));
+    const q = D.quality;
+    root.appendChild(el('div', 'sub',
+      `${fmt(DUR)} · ${q.snr_db} dB SNR · peak ${q.peak_dbfs} dBFS · analysed ${String(D.generated_at).slice(0, 16).replace('T', ' ')}`));
+    (q.warnings || []).forEach(w => root.appendChild(el('div', 'warn', esc(w))));
+
+    // ------------------------------------------------------------ controls
+    const bar = el('div', 'bar');
+    const play = el('button', 'primary', 'Play'); play.style.minWidth = '76px';
+    const tc = el('span', 'time', '0:00.0 / ' + fmt(DUR));
+    const spacer = el('span'); spacer.style.flex = '1';
+    const zo = el('button', null, '&minus;'), zi = el('button', null, '+');
+    const follow = el('label', 'time');
+    follow.innerHTML = '<input type="checkbox" checked> follow';
+    bar.append(play, tc, spacer, zo, zi, follow);
+    root.appendChild(bar);
+
+    const wrap = el('div', 'tlwrap');
+    const cv = el('canvas');
+    wrap.appendChild(cv); root.appendChild(wrap);
+    const ctx = cv.getContext('2d');
+
+    root.appendChild(el('div', 'legend',
+      '<span><i style="background:#3d6ae0"></i>pitch (semitones re your median)</span>' +
+      '<span><i style="background:rgba(201,139,58,.6)"></i>pause</span>' +
+      '<span><i style="background:rgba(120,132,160,.6)"></i>energy &amp; breaths</span>'));
+
+    // --------------------------------------------------------------- cards
+    const t = D.timing, r = D.rate || {}, p = D.prosody || {},
+          v = D.vocabulary || {}, d = D.disfluency || {};
+    const fr = d.filled_pauses_estimated_range;
+    const cards = [
+      ['Speaking rate', (r.words_per_minute ?? '—') + (r.words_per_minute ? ' wpm' : ''),
+        r.wpm_local_min != null ? `local ${r.wpm_local_min.toFixed(0)}–${r.wpm_local_max.toFixed(0)}` : ''],
+      ['Articulation', (r.articulation_rate_syl_per_s ?? '—') + (r.articulation_rate_syl_per_s ? ' syl/s' : ''), 'while actually speaking'],
+      ['Pause ratio', (t.pause_ratio * 100).toFixed(0) + '%', `${t.n_pauses} pauses · ${t.pauses_per_minute}/min`],
+      ['Longest pause', (t.pause_longest_s ?? 0).toFixed(2) + 's', ''],
+      ['Pitch median', (p.f0_median_hz ?? '—') + (p.f0_median_hz ? ' Hz' : ''), p.pitch_floor_hz ? `range ${p.pitch_floor_hz}–${p.pitch_ceiling_hz} Hz` : ''],
+      ['Pitch variation', (p.f0_sd_st ?? '—') + (p.f0_sd_st ? ' st' : ''), p.f0_range_st ? `${p.f0_range_st} st span` : ''],
+      ['Energy variation', (p.energy_sd_db ?? '—') + (p.energy_sd_db ? ' dB' : ''), 'this mic only'],
+      ['Filled pauses', fr ? (fr[0] === fr[1] ? fr[0] : fr[0] + '–' + fr[1]) : '—', 'lower bound + estimate'],
+      ['Repetitions', d.repetition_count ?? '—', ''],
+      ['Words', v.total_tokens ?? '—', v.unique_tokens != null ? `${v.unique_tokens} unique` : ''],
+      ['Lexical diversity', v.mtld ? v.mtld.toFixed(0) : 'n/a', v.mtld ? 'MTLD' : 'needs 100+ words'],
+    ];
+    root.appendChild(el('div', 'cards', cards.map(([k, val, n]) =>
+      `<div class="card"><div class="k">${k}</div><div class="v">${val}</div><div class="n">${n || ''}</div></div>`).join('')));
+
+    // --------------------------------------------------------------- lists
+    function listBlock(title, items, renderRow, seekOf) {
+      const box = el('div');
+      box.appendChild(el('h2', null, title));
+      const list = el('list' in window ? 'div' : 'div', 'list');
+      if (!items.length) list.appendChild(el('div', 'empty', 'none'));
+      else items.forEach(it => {
+        const row = el('div', 'row', renderRow(it));
+        const s = seekOf ? seekOf(it) : null;
+        if (s != null) row.onclick = () => { seek(Math.max(0, s - 0.35)); audio.play(); };
+        else row.style.cursor = 'default';
+        list.appendChild(row);
+      });
+      box.appendChild(list);
+      return box;
+    }
+    const c1 = el('div', 'cols');
+    c1.append(
+      listBlock('Pauses', D.pauses || [],
+        x => `<span class="t">${fmt(x.start)}</span><span>${x.kind}</span><span class="d">${x.duration.toFixed(2)}s</span>`,
+        x => x.start),
+      listBlock('Breaths & unaccounted audio', unacc,
+        x => `<span class="t">${fmt(x.start)}</span><span>${x.kind === 'possible_filler' ? 'possible filler' : 'breath / unvoiced'}</span>` +
+             `<span class="d">${x.duration.toFixed(2)}s · voiced ${(x.voiced_ratio * 100).toFixed(0)}%</span>`,
+        x => x.start));
+    root.appendChild(c1);
+
+    const c2 = el('div', 'cols');
+    c2.append(
+      listBlock('Discourse markers', (d.discourse_markers || []),
+        x => `<span class="t">${fmt(x.time)}</span><span>${esc(x.context)}</span>`,
+        x => x.time),
+      listBlock('Repeated phrases', (v.repeated_phrases || []),
+        x => `<span>&ldquo;${esc(x.phrase)}&rdquo;</span><span class="d">×${x.count}</span>`,
+        null));
+    root.appendChild(c2);
+
+    // ---------------------------------------------------------- transcript
+    const words = (D.transcript && D.transcript.words) || [];
+    root.appendChild(el('h2', null, 'Transcript'));
+    const tx = el('div', 'tx');
+    const gapAfter = new Set();
+    (D.pauses || []).forEach(pz => {
+      let bi = -1, bd = 1e9;
+      words.forEach((w, i) => { const dd = Math.abs(w.end - pz.start); if (dd < bd) { bd = dd; bi = i; } });
+      if (bi >= 0 && bd < 0.4) gapAfter.add(bi);
+    });
+    if (!words.length) tx.appendChild(el('div', 'empty', 'no transcript'));
+    words.forEach((w, i) => {
+      const s = el('span', gapAfter.has(i) ? 'gap' : null, esc(w.word));
+      s.onclick = () => seek(w.start);
+      tx.append(s, document.createTextNode(' '));
+    });
+    root.appendChild(tx);
+    const spans = [...tx.querySelectorAll('span')];
+
+    root.appendChild(el('div', 'note',
+      'No overall score by design — every figure here is a measurement. Orange bands are ' +
+      'pauses, grey blocks under the energy trace are breaths or audio the transcript did ' +
+      'not account for, and underlined words are followed by a pause. Click anything to ' +
+      'hear it. Space plays, arrows jump 2s.'));
+
+    // ------------------------------------------------------------- drawing
+    function layout() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.max(320, Math.ceil(DUR * pps));
+      cv.style.width = w + 'px'; cv.style.height = H + 'px';
+      cv.width = w * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+    function draw() {
+      const w = Math.max(320, DUR * pps), ey0 = 118, eyH = 56, py0 = 16, pyH = 92;
+      ctx.clearRect(0, 0, w, H);
+      ctx.fillStyle = '#171a22'; ctx.fillRect(0, 0, w, H);
+      (D.pauses || []).forEach(pz => {
+        ctx.fillStyle = pz.kind === 'extended' ? 'rgba(201,139,58,.30)' : 'rgba(201,139,58,.15)';
+        ctx.fillRect(pz.start * pps, 0, Math.max(1, pz.duration * pps), H);
+      });
+      unacc.forEach(b => {
+        ctx.fillStyle = b.kind === 'possible_filler' ? 'rgba(224,90,90,.42)' : 'rgba(120,132,160,.30)';
+        ctx.fillRect(b.start * pps, ey0, Math.max(1, b.duration * pps), eyH);
+      });
+      const step = pps > 55 ? 1 : pps > 26 ? 2 : pps > 12 ? 5 : 10;
+      ctx.strokeStyle = '#242938'; ctx.fillStyle = '#5d6579';
+      ctx.font = '10px ui-monospace,monospace'; ctx.lineWidth = 1;
+      for (let s = 0; s <= DUR; s += step) {
+        const x = Math.round(s * pps) + .5;
+        ctx.beginPath(); ctx.moveTo(x, H - 15); ctx.lineTo(x, H); ctx.stroke();
+        if (s % (step * (pps > 26 ? 5 : 2)) === 0) ctx.fillText(fmt(s), x + 3, H - 5);
+      }
+      const C = D.contours;
+      if (C && C.energy_db && C.energy_db.length) {
+        const es = C.energy_db.filter(x => x > -90);
+        const lo = Math.min(...es), hi = Math.max(...es);
+        ctx.fillStyle = 'rgba(120,132,160,.55)';
+        ctx.beginPath(); ctx.moveTo(0, ey0 + eyH);
+        C.energy_db.forEach((val, i) => {
+          const n = Math.max(0, Math.min(1, (val - lo) / ((hi - lo) || 1)));
+          ctx.lineTo(i * C.step_s * pps, ey0 + eyH - n * eyH);
+        });
+        ctx.lineTo(C.energy_db.length * C.step_s * pps, ey0 + eyH);
+        ctx.closePath(); ctx.fill();
+        const vals = C.f0_st.filter(x => x !== null);
+        if (vals.length) {
+          const a = Math.min(...vals), b = Math.max(...vals), span = (b - a) || 1;
+          const zy = py0 + pyH - ((0 - a) / span) * pyH;
+          ctx.strokeStyle = 'rgba(120,132,160,.35)';
+          ctx.beginPath(); ctx.moveTo(0, zy); ctx.lineTo(w, zy); ctx.stroke();
+          ctx.fillStyle = '#3d6ae0';
+          C.f0_st.forEach((val, i) => {
+            if (val === null) return;
+            const y = py0 + pyH - ((val - a) / span) * pyH;
+            ctx.fillRect(i * C.step_s * pps, y - 1.4, Math.max(1.6, C.step_s * pps), 2.8);
+          });
+          ctx.fillStyle = '#5d6579';
+          ctx.fillText(b.toFixed(0) + ' st', 4, py0 + 9);
+          ctx.fillText(a.toFixed(0) + ' st', 4, py0 + pyH - 2);
+        }
+      }
+      const x = audio.currentTime * pps;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+
+    function seek(s) {
+      if (!isFinite(s)) return;
+      audio.currentTime = Math.max(0, Math.min(DUR - 0.01, s));
+      if (audio.paused) draw();
+    }
+    function fitZoom() {
+      const w = wrap.clientWidth || 900;
+      pps = Math.max(6, Math.min(90, (w - 4) / Math.max(DUR, 1)));
+      layout();
+    }
+
+    cv.onclick = e => seek((e.clientX - cv.getBoundingClientRect().left) / pps);
+    play.onclick = () => audio.paused ? audio.play() : audio.pause();
+    audio.onplay = () => play.textContent = 'Pause';
+    audio.onpause = () => play.textContent = 'Play';
+    zi.onclick = () => { pps = Math.min(400, pps * 1.6); layout(); };
+    zo.onclick = () => { pps = Math.max(4, pps / 1.6); layout(); };
+
+    let cur = -1;
+    function tick() {
+      const now = audio.currentTime;
+      let lo = 0, hi = words.length - 1, f = -1;
+      while (lo <= hi) { const m = (lo + hi) >> 1; if (words[m].start <= now) { f = m; lo = m + 1; } else hi = m - 1; }
+      if (f !== cur) {
+        if (spans[cur]) spans[cur].classList.remove('on');
+        if (spans[f]) {
+          spans[f].classList.add('on');
+          if (follow.firstChild.checked) spans[f].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+        cur = f;
+      }
+      tc.textContent = fmt(now, true) + ' / ' + fmt(DUR);
+      draw();
+      if (follow.firstChild.checked && !audio.paused) {
+        const x = now * pps;
+        if (x < wrap.scrollLeft + 60 || x > wrap.scrollLeft + wrap.clientWidth - 60)
+          wrap.scrollLeft = x - wrap.clientWidth / 2;
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    const onKey = e => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') { e.preventDefault(); audio.paused ? audio.play() : audio.pause(); }
+      if (e.code === 'ArrowLeft') seek(audio.currentTime - 2);
+      if (e.code === 'ArrowRight') seek(audio.currentTime + 2);
+    };
+    addEventListener('keydown', onKey);
+    addEventListener('resize', fitZoom);
+    audio.addEventListener('loadedmetadata', draw);
+    fitZoom(); tick();
+
+    return {
+      destroy() {
+        cancelAnimationFrame(raf);
+        removeEventListener('keydown', onKey);
+        removeEventListener('resize', fitZoom);
+        audio.pause(); audio.src = '';
+      },
+      seek, audio,
+    };
+  }
+  return { render, fmt };
+})();
+
+</script>
+<script>
+SpeechReport.render(document.getElementById('root'), {"schema": "speechlab/1", "generated_at": "2026-09-03T01:22:29-04:00", "source": {"path": "/Users/diegomendoza/lecture-coach/analysis/tests/fixtures/disfluent.wav", "duration_s": 12.703, "name": "disfluent.wav"}, "quality": {"usable": true, "duration_s": 12.703, "source_sample_rate": 16000, "source_channels": 1, "peak_dbfs": -3.1, "clipped_fraction": 0.0, "dc_offset": -0.00026, "noise_floor_dbfs": -49.8, "speech_level_dbfs": -14.2, "snr_db": 35.6, "warnings": []}, "timing": {"total_duration_s": 12.703, "speaking_span_s": 12.438, "phonation_time_s": 10.842, "phonation_ratio": 0.8717, "pause_ratio": 0.1283, "n_speech_segments": 4, "n_pauses": 3, "pauses_per_minute": 14.47, "pause_counts": {"micro": 0, "short": 0, "long": 3, "extended": 0}, "pause_median_s": 0.528, "pause_mean_s": 0.532, "pause_p90_s": 0.538, "pause_longest_s": 0.541, "pause_total_s": 1.595}, "prosody": {"voiced_frames": 878, "voiced_ratio": 0.81, "pitch_floor_hz": 106.8, "pitch_ceiling_hz": 336.6, "f0_median_hz": 169.5, "f0_sd_st": 2.297, "f0_range_st": 7.332, "f0_iqr_st": 2.729, "energy_median_dbfs": -16.27, "energy_sd_db": 8.798, "energy_range_db": 26.189}, "pauses": [{"start": 3.441, "end": 3.969, "duration": 0.528, "kind": "long"}, {"start": 6.603, "end": 7.144, "duration": 0.541, "kind": "long"}, {"start": 9.616, "end": 10.143, "duration": 0.527, "kind": "long"}], "contours": {"step_s": 0.1, "f0_st": [null, null, null, null, 4.76, 2.66, 1.83, null, -0.9, 1.22, 2.21, 0.26, -0.5, 0.71, null, -2.13, null, 0.79, null, -0.83, -2.63, null, -1.54, -2.4, -1.19, null, 0.15, null, -1.94, -1.6, -3.13, null, -1.98, -5.34, null, null, null, null, null, null, 0.29, -0.38, 0.18, 3.96, 3.16, null, 2.4, 0.18, null, -1.18, -1.49, -0.0, -0.91, -2.06, null, -1.25, -0.22, 3.15, 1.44, 2.32, -0.9, -1.32, null, -0.36, -2.62, -6.56, -7.16, null, null, null, null, null, 1.21, 0.97, 0.3, 3.51, 2.85, -0.53, -0.6, null, 0.74, 0.3, -0.26, -1.66, -0.34, 0.96, 0.74, null, 0.27, 1.61, 0.83, -1.74, -1.6, -4.73, null, null, null, null, null, null, null, null, 1.43, 0.92, 2.33, 0.17, -0.65, null, -1.05, null, 1.55, 1.34, null, 0.68, -3.52, 0.17, 0.21, 1.28, null, 1.65, -0.19, null, 0.88, -2.64, -7.29, null, null], "energy_db": [-50.3, -49.9, -37.0, -17.8, -15.1, -15.3, -13.8, -15.0, -19.7, -14.7, -15.4, -16.3, -14.6, -16.2, -24.2, -33.2, -15.3, -16.4, -15.4, -15.0, -15.7, -15.1, -24.7, -18.5, -14.5, -21.2, -15.9, -32.0, -24.4, -15.6, -25.2, -26.3, -16.2, -17.7, -25.3, -49.9, -50.5, -50.1, -49.7, -50.1, -15.7, -15.9, -15.5, -14.8, -14.9, -21.0, -14.3, -15.1, -43.0, -15.1, -23.3, -15.5, -39.9, -19.0, -32.2, -23.9, -14.1, -41.6, -17.5, -13.7, -30.5, -19.9, -15.2, -14.8, -14.5, -18.7, -46.5, -50.4, -50.1, -50.2, -49.6, -49.6, -13.0, -13.0, -13.1, -14.7, -17.2, -13.8, -13.9, -44.5, -15.3, -15.0, -15.9, -19.9, -18.5, -15.2, -15.0, -29.6, -33.2, -14.0, -14.0, -39.6, -14.9, -17.4, -33.0, -34.4, -39.5, -49.7, -50.1, -49.4, -49.8, -49.7, -14.9, -13.0, -12.9, -14.7, -15.1, -30.4, -14.6, -33.9, -13.7, -15.6, -18.1, -14.0, -26.4, -13.4, -13.7, -15.5, -36.6, -15.4, -14.1, -38.2, -14.5, -15.5, -20.2, -49.1, -50.2]}, "transcript": {"language": "en", "model": "mlx-community/whisper-large-v3-turbo", "text": "So, um, today I want to talk about, uh, the results of our study. The, the data shows that, like, a significant improvement. And you know, we, we found that, uh, basically it works. I mean, the, the conclusion is, you know, pretty clear.", "words": [{"word": "So,", "start": 0.0, "end": 0.42, "prob": 0.959}, {"word": "um,", "start": 0.58, "end": 0.62, "prob": 0.739}, {"word": "today", "start": 0.68, "end": 0.88, "prob": 1.0}, {"word": "I", "start": 0.88, "end": 1.08, "prob": 0.974}, {"word": "want", "start": 1.08, "end": 1.34, "prob": 1.0}, {"word": "to", "start": 1.34, "end": 1.5, "prob": 1.0}, {"word": "talk", "start": 1.5, "end": 1.76, "prob": 1.0}, {"word": "about,", "start": 1.76, "end": 2.06, "prob": 0.999}, {"word": "uh,", "start": 2.18, "end": 2.18, "prob": 0.881}, {"word": "the", "start": 2.3, "end": 2.32, "prob": 1.0}, {"word": "results", "start": 2.32, "end": 2.66, "prob": 1.0}, {"word": "of", "start": 2.66, "end": 2.84, "prob": 1.0}, {"word": "our", "start": 2.84, "end": 2.98, "prob": 1.0}, {"word": "study.", "start": 2.98, "end": 3.38, "prob": 1.0}, {"word": "The,", "start": 3.68, "end": 4.04, "prob": 0.945}, {"word": "the", "start": 4.06, "end": 4.16, "prob": 0.999}, {"word": "data", "start": 4.16, "end": 4.4, "prob": 0.999}, {"word": "shows", "start": 4.4, "end": 4.74, "prob": 1.0}, {"word": "that,", "start": 4.74, "end": 4.98, "prob": 1.0}, {"word": "like,", "start": 4.98, "end": 5.2, "prob": 0.992}, {"word": "a", "start": 5.26, "end": 5.34, "prob": 1.0}, {"word": "significant", "start": 5.34, "end": 5.88, "prob": 1.0}, {"word": "improvement.", "start": 5.88, "end": 6.46, "prob": 1.0}, {"word": "And", "start": 6.9, "end": 7.26, "prob": 1.0}, {"word": "you", "start": 7.26, "end": 7.4, "prob": 0.822}, {"word": "know,", "start": 7.4, "end": 7.54, "prob": 1.0}, {"word": "we,", "start": 7.64, "end": 7.72, "prob": 0.991}, {"word": "we", "start": 7.74, "end": 7.84, "prob": 1.0}, {"word": "found", "start": 7.84, "end": 8.14, "prob": 0.998}, {"word": "that,", "start": 8.14, "end": 8.32, "prob": 1.0}, {"word": "uh,", "start": 8.36, "end": 8.46, "prob": 0.999}, {"word": "basically", "start": 8.86, "end": 8.86, "prob": 1.0}, {"word": "it", "start": 8.86, "end": 9.12, "prob": 0.903}, {"word": "works.", "start": 9.12, "end": 9.5, "prob": 1.0}, {"word": "I", "start": 9.88, "end": 10.24, "prob": 1.0}, {"word": "mean,", "start": 10.24, "end": 10.44, "prob": 1.0}, {"word": "the,", "start": 10.52, "end": 10.56, "prob": 0.897}, {"word": "the", "start": 10.56, "end": 10.68, "prob": 1.0}, {"word": "conclusion", "start": 10.68, "end": 11.18, "prob": 1.0}, {"word": "is,", "start": 11.18, "end": 11.42, "prob": 0.988}, {"word": "you", "start": 11.46, "end": 11.56, "prob": 1.0}, {"word": "know,", "start": 11.56, "end": 11.7, "prob": 1.0}, {"word": "pretty", "start": 11.82, "end": 11.98, "prob": 1.0}, {"word": "clear.", "start": 11.98, "end": 12.34, "prob": 1.0}]}, "rate": {"n_words": 44, "words_per_minute": 212.3, "syllables_per_second": 4.904, "articulation_rate_syl_per_s": 5.626}, "disfluency": {"filled_pauses": [{"word": "um", "time": 0.58, "duration": 0.04}, {"word": "uh", "time": 2.18, "duration": 0.0}, {"word": "uh", "time": 8.36, "duration": 0.1}], "filled_pause_count": 3, "discourse_markers": [{"phrase": "like", "time": 4.98, "context": "the data shows that, [like,] a significant improvement. And"}, {"phrase": "you know", "time": 7.26, "context": "a significant improvement. And [you know,] we, we found that,"}, {"phrase": "basically", "time": 8.86, "context": "we found that, uh, [basically] it works. I mean,"}, {"phrase": "i mean", "time": 9.88, "context": "uh, basically it works. [I mean,] the, the conclusion is,"}, {"phrase": "you know", "time": 11.46, "context": "the, the conclusion is, [you know,] pretty clear."}], "discourse_marker_counts": {"like": 1, "you know": 2, "basically": 1, "i mean": 1}, "repetitions": [{"phrase": "the", "words": 1, "time": 3.68, "context": "results of our study. [The, the] data shows that, like,"}, {"phrase": "we", "words": 1, "time": 7.64, "context": "improvement. And you know, [we, we] found that, uh, basically"}, {"phrase": "the", "words": 1, "time": 10.52, "context": "it works. I mean, [the, the] conclusion is, you know,"}], "repetition_count": 3, "acoustic_candidates": [], "unaccounted_regions": [{"start": 0.42, "end": 0.58, "duration": 0.16, "voiced_ratio": 1.0, "f0_sd_st": 2.1, "kind": "breath_or_unvoiced"}, {"start": 8.46, "end": 8.86, "duration": 0.4, "voiced_ratio": 0.775, "f0_sd_st": 1.12, "kind": "possible_filler"}, {"start": 12.34, "end": 12.672, "duration": 0.332, "voiced_ratio": 0.353, "f0_sd_st": 1.23, "kind": "breath_or_unvoiced"}], "acoustic_candidate_count": 0, "filled_pauses_estimated_range": [3, 3], "filled_pauses_per_minute": 14.47, "discourse_markers_per_minute": 24.12, "disfluencies_per_100_words": 13.64, "note": "filled_pause_count is a lower bound - Whisper removes many fillers. acoustic_candidates estimates what it removed; add them for a range."}, "vocabulary": {"total_tokens": 44, "unique_tokens": 34, "type_token_ratio": 0.7727, "mattr_50": 0.7727, "syllables": 61, "mean_syllables_per_word": 1.386, "mean_word_length": 3.977, "repeated_phrases": [], "mtld_note": "omitted: 44 tokens, MTLD needs >= 100 to be stable"}, "asr_coverage": {"speech_time_s": 10.842, "unaccounted_time_s": 0.892, "unaccounted_ratio": 0.0823}}, {audioUrl: "disfluent.wav"});
+</script>
+</body></html>
