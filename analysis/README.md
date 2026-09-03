@@ -7,6 +7,28 @@ alongside the `*.session.json` that `main.js` already produces.
 .venv/bin/python -m speechlab ~/Movies/"Lecture Coach"/take_2026-09-01_143022.mp4
 ```
 
+Writes three files next to the take: a readable terminal summary, the
+`.speech.json` sidecar, and a clickable `.speech.html` report — a seekable
+timeline with the pitch and energy contours, pause bands, breath markers and a
+transcript where every word seeks the audio. Open it with `open take.speech.html`.
+Keep the HTML beside its audio file; it references it by relative path rather
+than embedding it, so a 45-minute take stays small.
+
+Prints a readable summary and writes the JSON. Add `-q` for JSON only,
+`--no-asr` to skip the transcript (acoustics only, no model load), `--no-html`
+to skip the report.
+
+To test without Electron, record straight from the mic:
+
+```bash
+.venv/bin/python tools/record.py 60          # writes take_<timestamp>.wav
+.venv/bin/python -m speechlab take_*.wav --language en
+```
+
+The first recording will need Terminal granted microphone access in System
+Settings > Privacy & Security > Microphone; the recorder warns if the stream
+came back silent.
+
 Runs entirely on-device. Nothing is uploaded; the only network access is the
 one-time Whisper weight download from Hugging Face.
 
@@ -122,6 +144,12 @@ no number. The smoke suite asserts no field named `*score*` exists.
   material prosody cares about. A separate unprocessed audio-only track would
   measure better.
 - MTLD is withheld below 100 tokens; short takes get MATTR only.
+- **Quiet recordings degrade voicing detection.** Praat's voiced/unvoiced
+  decision is level-dependent, so a take at ~-37 dBFS speech level drops the
+  voiced-frame ratio from ~0.85 to ~0.55 and with it the confidence of any
+  filler classification. The filler/breath threshold is therefore set relative
+  to each take's own voicing rate, not as an absolute. The real fix is recording
+  hotter: aim for peaks around -12 dBFS and SNR above 20 dB.
 
 ## Integration (not built yet)
 

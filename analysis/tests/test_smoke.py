@@ -221,6 +221,18 @@ def main() -> int:
             check("sidecar carries drawing contours",
                   "contours" in j and len(j["contours"]["f0_st"]) > 10,
                   f"{len(j.get('contours',{}).get('f0_st',[]))} points")
+            check("unaccounted audio is labelled for listening",
+                  all(x.get("kind") in ("possible_filler", "breath_or_unvoiced")
+                      for x in j["disfluency"]["unaccounted_regions"]))
+            from speechlab import viewer
+
+            html = viewer.render(j, FIXTURES / "cli_out.html", Path(d["file"]))
+            body = html.read_text()
+            check("HTML report renders with data and a relative audio path",
+                  html.stat().st_size > 8000
+                  and "__DATA__" not in body and "__AUDIO__" not in body
+                  and 'src="disfluent.wav"' in body,
+                  f"{html.stat().st_size} bytes")
 
     n_pass = sum(1 for r, _, _ in RESULTS if r == "PASS")
     n_fail = sum(1 for r, _, _ in RESULTS if r == "FAIL")

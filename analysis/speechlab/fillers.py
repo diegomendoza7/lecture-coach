@@ -157,6 +157,34 @@ def acoustic_candidates(cov: dict, pros, words=None) -> list[dict]:
     return out
 
 
+def label_unaccounted(cov: dict, pros) -> list[dict]:
+    """Tag every unaccounted region so the viewer can offer it for listening.
+
+    Voicing is the discriminator: a filled pause is a held vowel and is voiced,
+    while a breath is turbulent noise and is not. Praat's voicing decision is
+    level-dependent, so the bar is set relative to how much of THIS take was
+    voiced at all - an absolute threshold calibrated on clean audio marks
+    everything in a quiet recording as a breath.
+    """
+    voiced_all = float((pros.f0_hz > 0).mean()) if len(pros.f0_hz) else 0.0
+    bar = max(0.35, 0.75 * voiced_all)
+    out = []
+    for r in cov.get("unaccounted_regions", []):
+        m = (pros.times >= r["start"]) & (pros.times <= r["end"])
+        vr = float((pros.f0_hz[m] > 0).mean()) if m.sum() else 0.0
+        st = pros.f0_st[m][pros.f0_hz[m] > 0]
+        st = st[np.isfinite(st)]
+        sd = float(np.std(st)) if len(st) >= 3 else None
+        kind = "possible_filler" if (
+            vr >= bar and FILLER_MIN_S <= r["duration"] <= FILLER_MAX_S
+            and (sd is None or sd <= FILLER_MAX_F0_SD_ST)
+        ) else "breath_or_unvoiced"
+        out.append(r | {"voiced_ratio": round(vr, 3),
+                        "f0_sd_st": None if sd is None else round(sd, 2),
+                        "kind": kind})
+    return out
+
+
 def analyze(words, cov: dict, pros, speaking_span_s: float, n_tokens: int) -> dict:
     t = from_transcript(words)
     reps = repetitions(words)
@@ -167,6 +195,7 @@ def analyze(words, cov: dict, pros, speaking_span_s: float, n_tokens: int) -> di
         "repetitions": reps,
         "repetition_count": len(reps),
         "acoustic_candidates": cands,
+        "unaccounted_regions": label_unaccounted(cov, pros),
         "acoustic_candidate_count": len(cands),
         # The honest headline: a range, not a single confident count.
         "filled_pauses_estimated_range": [
