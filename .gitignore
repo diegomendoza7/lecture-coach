@@ -1,3 +1,15 @@
 node_modules/
 dist/
 *.log
+
+# Packaged app, Python environment and caches
+build/
+.venv/
+__pycache__/
+*.egg-info/
+.DS_Store
+
+# Personal practice takes (recordings and their reports)
+analysis/take*.wav
+analysis/take*.speech.json
+analysis/take*.speech.html

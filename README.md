@@ -351,3 +351,7 @@ drops to ~1 fps in the background and the recording would stutter.
   saved file would be the honest way; the browser SpeechRecognition API is unreliable here).
 - Saving isolated screen / camera / audio tracks alongside the composite for editing.
 - Packaging (`electron-builder`) and a signed, notarised `.app`.
+
+## About this history
+
+Built locally between August and September 2026. Uploaded to GitHub on October 6, 2026. Commit dates reflect when the work was done on my machine. History is reconstructed from file timestamps and session logs, so early intermediate versions may be missing.
